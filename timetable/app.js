@@ -6,6 +6,48 @@
   const qs = (sel) => document.querySelector(sel);
   const qsa = (sel) => Array.from(document.querySelectorAll(sel));
 
+  // Backend integration (optional, falls back to local storage)
+  const API_BASE = "http://localhost:3000/api";
+  let useBackend = false;
+  let authToken = null;
+
+  async function apiFetch(path, method = "GET", body = null) {
+    const headers = { "Content-Type": "application/json" };
+    if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+    const res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : null,
+    });
+    return res;
+  }
+
+  async function tryBackendLogin(campus, username, password) {
+    try {
+      const res = await apiFetch("/login", "POST", { campus, username, password });
+      if (!res.ok) return null;
+      const data = await res.json();
+      authToken = data.token;
+      useBackend = true;
+      saveSession({ campus, username, token: authToken });
+      const campusRes = await apiFetch(`/campus/${campus}`, "GET");
+      if (campusRes.ok) {
+        const campusDataObj = await campusRes.json();
+        state.campuses[campus] = campusDataObj;
+      }
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  async function syncCampusToBackend() {
+    if (!useBackend || !session) return;
+    try {
+      await apiFetch(`/campus/${session.campus}`, "POST", state.campuses[session.campus]);
+    } catch {}
+  }
+
   function uid(prefix = "") {
     return prefix + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
@@ -56,8 +98,22 @@
     }
   }
 
-  function saveState(state) {
-    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  async function refreshFromBackendIfPossible() {
+    if (session && session.token) {
+      authToken = session.token;
+      useBackend = true;
+      try {
+        const res = await apiFetch(`/campus/${session.campus}`, "GET");
+        if (res.ok) {
+          state.campuses[session.campus] = await res.json();
+        }
+      } catch {}
+    }
+  }
+
+  function saveState(stateObj) {
+    localStorage.setItem(LS_KEY, JSON.stringify(stateObj));
+    syncCampusToBackend();
   }
 
   function loadSession() {
@@ -70,8 +126,8 @@
     }
   }
 
-  function saveSession(session) {
-    sessionStorage.setItem(SS_KEY, JSON.stringify(session));
+  function saveSession(sess) {
+    sessionStorage.setItem(SS_KEY, JSON.stringify(sess));
   }
 
   function clearSession() {
@@ -857,10 +913,23 @@
     window.print();
   }
 
-  function login() {
+  async function login() {
     const campus = qs("#login-campus").value;
     const u = qs("#login-username").value.trim();
     const p = qs("#login-password").value;
+
+    // Try backend first
+    const backendResult = await tryBackendLogin(campus, u, p);
+    if (backendResult) {
+      session = { campus, username: u, token: authToken };
+      qs("#login-error").textContent = "";
+      setView("main-view");
+      renderTopbar();
+      setSubview("dashboard-view");
+      return;
+    }
+
+    // Fallback to local credentials
     const creds = state.campuses[campus].credentials;
     if (u === creds.username && p === creds.password) {
       session = { campus, username: u };
@@ -877,11 +946,13 @@
   function logout() {
     clearSession();
     session = null;
+    authToken = null;
+    useBackend = false;
     setView("login-view");
   }
 
-  function init() {
-    qs("#login-button").addEventListener("click", login);
+  async function init() {
+    qs("#login-button").addEventListener("click", () => login());
     qs("#logout-button").addEventListener("click", logout);
     qs("#modal-close").addEventListener("click", closeModal);
 
@@ -906,6 +977,18 @@
     qs("#pdf-button").addEventListener("click", exportPDF);
     qs("#excel-button").addEventListener("click", exportExcel);
     qs("#print-button").addEventListener("click", printTimetable);
+
+    // If a backend session exists, refresh campus state
+    if (session && session.token) {
+      authToken = session.token;
+      useBackend = true;
+      try {
+        const res = await apiFetch(`/campus/${session.campus}`, "GET");
+        if (res.ok) {
+          state.campuses[session.campus] = await res.json();
+        }
+      } catch {}
+    }
 
     if (session) {
       setView("main-view");

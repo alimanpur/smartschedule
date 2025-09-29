@@ -1,0 +1,48 @@
+{
+  "campuses": {
+    "MAIN": {
+      "credentials": {
+        "username": "main_hod",
+        "password": "admin123"
+      },
+      "config": {
+        "collegeName": "Your College",
+        "campusCode": "MAIN",
+        "branches": [],
+        "semesters": [1, 2, 3, 4, 5, 6, 7, 8],
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "lectureDuration": 60,
+        "lunchTime": "13:00",
+        "lunchDuration": 60,
+        "breaks": [],
+        "logoDataUrl": null
+      },
+      "teachers": [],
+      "subjects": [],
+      "timetables": []
+    },
+    "OFF": {
+      "credentials": {
+        "username": "off_hod",
+        "password": "admin123"
+      },
+      "config": {
+        "collegeName": "Your College",
+        "campusCode": "OFF",
+        "branches": [],
+        "semesters": [1, 2, 3, 4, 5, 6, 7, 8],
+        "startTime": "09:00",
+        "endTime": "17:00",
+        "lectureDuration": 60,
+        "lunchTime": "13:00",
+        "lunchDuration": 60,
+        "breaks": [],
+        "logoDataUrl": null
+      },
+      "teachers": [],
+      "subjects": [],
+      "timetables": []
+    }
+  }
+}
