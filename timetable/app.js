@@ -53,25 +53,51 @@
     } catch {}
   }
 
-  // Firebase integration
+  // Firebase integration (v12 modular via dynamic imports)
   function firebaseReady() {
-    return !!(window.firebase && window.firebase.apps && window.firebase.apps.length && window._fbDb);
+    return !!(window._fbDb);
   }
 
   async function initFirebaseIfEnabled() {
     if (!state.firebaseEnabled) return;
     const cfg = state.firebaseConfig || {};
     if (!cfg.apiKey || !cfg.projectId || !cfg.appId) return;
+
     try {
-      if (!window.firebase || !window.firebase.initializeApp) return;
-      if (!window.firebase.apps || !window.firebase.apps.length) {
-        window._fbApp = window.firebase.initializeApp(cfg);
-        window._fbDb = window.firebase.firestore();
-        try { await window._fbDb.enablePersistence(); } catch {}
-      } else {
-        window._fbApp = window.firebase.app();
-        window._fbDb = window.firebase.firestore();
+      if (!window._fbMods) {
+        const appMod = await import("https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js");
+        const fsMod = await import("https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js");
+        const authMod = await import("https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js");
+        window._fbMods = {
+          initializeApp: appMod.initializeApp,
+          getApps: appMod.getApps,
+          getApp: appMod.getApp,
+          deleteApp: appMod.deleteApp,
+          getFirestore: fsMod.getFirestore,
+          enableIndexedDbPersistence: fsMod.enableIndexedDbPersistence,
+          doc: fsMod.doc,
+          getDoc: fsMod.getDoc,
+          setDoc: fsMod.setDoc,
+          getAuth: authMod.getAuth,
+          signInWithEmailAndPassword: authMod.signInWithEmailAndPassword,
+          setPersistence: authMod.setPersistence,
+          browserLocalPersistence: authMod.browserLocalPersistence,
+          signOut: authMod.signOut
+        };
       }
+      const M = window._fbMods;
+      const apps = M.getApps();
+      let app;
+      if (apps && apps.length) {
+        app = M.getApp();
+      } else {
+        app = M.initializeApp(cfg);
+      }
+      window._fbApp = app;
+      window._fbDb = M.getFirestore(app);
+      window._fbAuth = M.getAuth(app);
+      try { await M.setPersistence(window._fbAuth, M.browserLocalPersistence); } catch {}
+      try { await M.enableIndexedDbPersistence(window._fbDb); } catch {}
     } catch {}
   }
 
@@ -81,14 +107,15 @@
     const db = window._fbDb;
     if (!db) return null;
     try {
-      const ref = db.collection("campuses").doc(campus);
-      const snap = await ref.get();
-      if (snap.exists) {
+      const M = window._fbMods;
+      const ref = M.doc(db, "campuses", campus);
+      const snap = await M.getDoc(ref);
+      if (snap.exists()) {
         state.campuses[campus] = snap.data();
         return state.campuses[campus];
       } else {
         const dc = defaultCampus(campus);
-        await ref.set(dc);
+        await M.setDoc(ref, dc);
         state.campuses[campus] = dc;
         return dc;
       }
@@ -103,8 +130,9 @@
     const db = window._fbDb;
     if (!db) return;
     try {
-      const ref = db.collection("campuses").doc(campus);
-      await ref.set(state.campuses[campus]);
+      const M = window._fbMods;
+      const ref = M.doc(db, "campuses", campus);
+      await M.setDoc(ref, state.campuses[campus]);
     } catch {}
   }
 
@@ -1251,6 +1279,27 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
 
     // Firebase first if enabled
     if (state.firebaseEnabled) {
+      await initFirebaseIfEnabled();
+
+      // Try Firebase Auth (email/password). Use email in the username field.
+      if (window._fbAuth && u && p && u.includes("@")) {
+        try {
+          const M = window._fbMods;
+          const cred = await M.signInWithEmailAndPassword(window._fbAuth, u, p);
+          session = { campus, username: u, uid: cred.user && cred.user.uid };
+          saveSession(session);
+          qs("#login-error").textContent = "";
+          await fbLoadCampus(campus); // pull latest campus data post-auth
+          setView("main-view");
+          renderTopbar();
+          setSubview("dashboard-view");
+          return;
+        } catch (e) {
+          // Fall through to Firestore-stored credentials
+        }
+      }
+
+      // Fallback to credentials stored in Firestore campus document
       const loaded = await fbLoadCampus(campus);
       if (loaded) {
         const creds = loaded.credentials;
