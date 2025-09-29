@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Automatic College Timetable Generator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="styles.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <!-- Login View -->
+    <section id="login-view" class="view active">
+      <div class="login-card">
+        <h1>Timetable Generator</h1>
+        <p class="subtitle">HOD Login</p>
+
+        <div class="form-group">
+          <label for="login-campus">Campus</label>
+          <select id="login-campus">
+            <option value="MAIN">Main Campus</option>
+            <option value="OFF">Off-Campus</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="login-username">Username</label>
+          <input id="login-username" type="text" placeholder="Enter username">
+        </div>
+
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" placeholder="Enter password">
+        </div>
+
+        <button id="login-button" class="btn primary">Login</button>
+        <div id="login-error" class="error-text"></div>
+
+        <div class="hint">
+          Default credentials:
+          <div class="hint-rows">
+            <div>Main: username "main_hod", password "admin123"</div>
+            <div>Off: username "off_hod", password "admin123"</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main App View -->
+    <section id="main-view" class="view">
+      <header class="topbar">
+        <div class="brand">
+          <div class="logo-circle">TG</div>
+          <div class="brand-info">
+            <div id="college-name">Your College</div>
+            <div id="campus-name" class="muted">Campus</div>
+          </div>
+        </div>
+        <nav class="nav">
+          <button class="nav-item active" data-target="dashboard-view">Dashboard</button>
+          <button class="nav-item" data-target="teachers-view">Teachers</button>
+          <button class="nav-item" data-target="subjects-view">Subjects</button>
+          <button class="nav-item" data-target="config-view">Configuration</button>
+          <button class="nav-item" data-target="timetable-view">Timetable</button>
+        </nav>
+        <div class="user-actions">
+          <span id="username-display"></span>
+          <button id="logout-button" class="btn">Logout</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <!-- Dashboard -->
+        <section id="dashboard-view" class="subview active">
+          <div class="cards">
+            <div class="card">
+              <div class="card-title">Total Teachers</div>
+              <div id="stat-teachers" class="stat-number">0</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Total Subjects</div>
+              <div id="stat-subjects" class="stat-number">0</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Timetable Generated</div>
+              <div id="stat-timetable" class="stat-number">No</div>
+            </div>
+            <div class="card">
+              <div class="card-title">Lecture Hours / Week</div>
+              <div id="stat-hours" class="stat-number">0</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Teachers -->
+        <section id="teachers-view" class="subview">
+          <div class="panel">
+            <h2>Teachers</h2>
+            <div class="two-col">
+              <div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="teacher-name">Name</label>
+                    <input id="teacher-name" type="text" placeholder="e.g., Dr. Jane Doe">
+                  </div>
+                  <div class="form-group">
+                    <label for="teacher-dept">Department</label>
+                    <input id="teacher-dept" type="text" placeholder="e.g., CSE">
+                  </div>
+                </div>
+                <button id="add-teacher-button" class="btn primary">Add New Teacher</button>
+              </div>
+              <div class="info">
+                <p>Set unavailable slots for each teacher via the "Availability" button.</p>
+              </div>
+            </div>
+
+            <div class="table">
+              <div class="table-header">
+                <div>Name</div>
+                <div>Department</div>
+                <div>Actions</div>
+              </div>
+              <div id="teachers-list" class="table-body"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Subjects -->
+        <section id="subjects-view" class="subview">
+          <div class="panel">
+            <h2>Subjects</h2>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="subject-code">Subject Code</label>
+                <input id="subject-code" type="text" placeholder="e.g., CS101">
+              </div>
+              <div class="form-group">
+                <label for="subject-name">Subject Name</label>
+                <input id="subject-name" type="text" placeholder="e.g., Data Structures">
+              </div>
+              <div class="form-group">
+                <label for="subject-branch">Branch</label>
+                <input id="subject-branch" type="text" placeholder="e.g., CSE">
+              </div>
+              <div class="form-group">
+                <label for="subject-sem">Semester</label>
+                <select id="subject-sem"></select>
+              </div>
+              <div class="form-group">
+                <label for="sessions-per-week">Sessions per week</label>
+                <input id="sessions-per-week" type="number" min="1" max="20" value="3">
+              </div>
+              <button id="add-subject-button" class="btn primary">Add Subject</button>
+            </div>
+
+            <div class="assign-panel">
+              <div class="teachers-palette">
+                <div class="palette-title">Teachers (drag onto subjects)</div>
+                <div id="teacher-chips" class="chips"></div>
+              </div>
+              <div class="subjects-list" id="subjects-list">
+                <!-- Subject cards with drop zones -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Configuration -->
+        <section id="config-view" class="subview">
+          <div class="panel">
+            <h2>Configuration</h2>
+            <div class="config-grid">
+              <div class="config-block">
+                <h3>College Details</h3>
+                <div class="form-group">
+                  <label for="config-college-name">College Name</label>
+                  <input id="config-college-name" type="text">
+                </div>
+                <div class="form-group">
+                  <label>Campus</label>
+                  <select id="config-campus">
+                    <option value="MAIN">Main Campus</option>
+                    <option value="OFF">Off-Campus</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="config-branches">Branches</label>
+                  <div class="inline">
+                    <input id="config-branch-input" type="text" placeholder="Add branch">
+                    <button id="add-branch-button" class="btn">Add</button>
+                  </div>
+                  <div id="branches-list" class="tags"></div>
+                </div>
+                <div class="form-group">
+                  <label>Semesters</label>
+                  <div id="semesters-list" class="tags"></div>
+                </div>
+                <div class="form-group">
+                  <label for="logo-input">Logo Upload</label>
+                  <input id="logo-input" type="file" accept="image/*">
+                  <div id="logo-preview"></div>
+                </div>
+              </div>
+
+              <div class="config-block">
+                <h3>Time Settings</h3>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="start-time">Start Time</label>
+                    <input id="start-time" type="time" value="09:00">
+                  </div>
+                  <div class="form-group">
+                    <label for="end-time">End Time</label>
+                    <input id="end-time" type="time" value="17:00">
+                  </div>
+                  <div class="form-group">
+                    <label for="lecture-duration">Lecture Duration (mins)</label>
+                    <input id="lecture-duration" type="number" min="15" max="180" value="60">
+                  </div>
+                  <div class="form-group">
+                    <label for="lunch-time">Lunch Start</label>
+                    <input id="lunch-time" type="time" value="13:00">
+                  </div>
+                  <div class="form-group">
+                    <label for="lunch-duration">Lunch Duration (mins)</label>
+                    <input id="lunch-duration" type="number" min="15" max="120" value="60">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Short Breaks</label>
+                  <div class="inline">
+                    <input id="break-time-input" type="time">
+                    <input id="break-duration-input" type="number" min="5" max="60" placeholder="mins">
+                    <button id="add-break-button" class="btn">Add Break</button>
+                  </div>
+                  <div id="breaks-list" class="tags"></div>
+                </div>
+              </div>
+
+              <div class="config-block">
+                <h3>Authentication</h3>
+                <div class="form-group">
+                  <label for="config-username">Username</label>
+                  <input id="config-username" type="text">
+                </div>
+                <div class="form-group">
+                  <label for="config-password">Password</label>
+                  <input id="config-password" type="password">
+                </div>
+                <button id="save-config-button" class="btn primary">Save Configuration</button>
+                <div id="config-saved" class="success-text"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Timetable -->
+        <section id="timetable-view" class="subview">
+          <div class="panel">
+            <h2>Timetable</h2>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="tt-branch">Branch</label>
+                <select id="tt-branch"></select>
+              </div>
+              <div class="form-group">
+                <label for="tt-sem">Semester</label>
+                <select id="tt-sem"></select>
+              </div>
+              <div class="form-group">
+                <label>Subjects</label>
+                <div id="tt-subjects-select" class="checkbox-list"></div>
+              </div>
+            </div>
+            <div class="actions">
+              <button id="generate-button" class="btn primary">Generate Timetable</button>
+              <button id="save-timetable-button" class="btn">Save Timetable</button>
+              <button id="clear-timetable-button" class="btn danger">Clear</button>
+              <div class="spacer"></div>
+              <button id="print-button" class="btn">Print</button>
+              <button id="pdf-button" class="btn">Export PDF</button>
+              <button id="excel-button" class="btn">Export Excel</button>
+            </div>
+
+            <div id="generation-status" class="muted"></div>
+
+            <div id="timetable-grid-wrapper">
+              <div id="timetable-grid" class="grid">
+                <!-- Grid renders here -->
+              </div>
+              <div id="subjects-palette" class="subjects-palette">
+                <div class="palette-title">Drag subjects to slots</div>
+                <div id="tt-subject-chips" class="chips"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </section>
+  </div>
+
+  <div id="modal-overlay" class="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <div id="modal-title">Edit Availability</div>
+        <button id="modal-close" class="btn icon">&times;</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.19.3/dist/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
