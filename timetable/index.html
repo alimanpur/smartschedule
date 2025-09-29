@@ -252,6 +252,53 @@
                 <button id="save-config-button" class="btn primary">Save Configuration</button>
                 <div id="config-saved" class="success-text"></div>
               </div>
+
+              <div class="config-block">
+                <h3>Print/Export & Server</h3>
+                <div class="form-group">
+                  <label for="wef-date">W.E.F. Date</label>
+                  <input id="wef-date" type="date">
+                </div>
+                <div class="form-group">
+                  <label for="program-title">Program/Batch Title</label>
+                  <input id="program-title" type="text" placeholder="e.g., B.TECH III YEAR III SEM COMPUTER SCIENCE & ENGINEERING">
+                </div>
+                <div class="form-group">
+                  <label for="term-title">Term Title</label>
+                  <input id="term-title" type="text" placeholder="e.g., TIME-TABLE : JULY-DEC 2025">
+                </div>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label for="coordinator-name">Coordinator Name</label>
+                    <input id="coordinator-name" type="text" placeholder="e.g., Ms. Nitu Mathuriya">
+                  </div>
+                  <div class="form-group">
+                    <label for="room-no">Room No.</label>
+                    <input id="room-no" type="text" placeholder="e.g., 111">
+                  </div>
+                  <div class="form-group">
+                    <label for="class-coordinator">Class Coordinator</label>
+                    <input id="class-coordinator" type="text" placeholder="e.g., Ms. Nitu Mathuriya">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="backend-url">Backend URL (API Base)</label>
+                  <input id="backend-url" type="text" placeholder="e.g., https://your-server.com/api">
+                </div>
+                <div class="form-group">
+                  <label for="enable-server" class="inline">
+                    <input id="enable-server" type="checkbox"> <span>Enable Server Sync</span>
+                  </label>
+                </div>
+                <div class="form-row">
+                  <button id="export-data-button" class="btn">Export Data (JSON)</button>
+                  <label class="btn">
+                    Import Data
+                    <input id="import-data-input" type="file" accept="application/json" style="display:none;">
+                  </label>
+                </div>
+              </div>
+
             </div>
           </div>
         </section>

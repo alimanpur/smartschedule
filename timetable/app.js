@@ -6,15 +6,19 @@
   const qs = (sel) => document.querySelector(sel);
   const qsa = (sel) => Array.from(document.querySelectorAll(sel));
 
-  // Backend integration (optional, falls back to local storage)
-  const API_BASE = "http://localhost:3000/api";
+  // Backend integration (configurable base, falls back to local storage)
   let useBackend = false;
   let authToken = null;
+
+  function getApiBase() {
+    const url = (state.backendUrl || "").trim();
+    return url || "http://localhost:3000/api";
+  }
 
   async function apiFetch(path, method = "GET", body = null) {
     const headers = { "Content-Type": "application/json" };
     if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
-    const res = await fetch(`${API_BASE}${path}`, {
+    const res = await fetch(`${getApiBase()}${path}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : null,
@@ -23,6 +27,7 @@
   }
 
   async function tryBackendLogin(campus, username, password) {
+    if (!state.serverEnabled || !(state.backendUrl || "").trim()) return null;
     try {
       const res = await apiFetch("/login", "POST", { campus, username, password });
       if (!res.ok) return null;
@@ -42,7 +47,7 @@
   }
 
   async function syncCampusToBackend() {
-    if (!useBackend || !session) return;
+    if (!useBackend || !session || !state.serverEnabled) return;
     try {
       await apiFetch(`/campus/${session.campus}`, "POST", state.campuses[session.campus]);
     } catch {}
@@ -70,6 +75,13 @@
         lunchDuration: 60,
         breaks: [],
         logoDataUrl: null,
+        // Print/Export meta
+        programTitle: "",
+        termTitle: "",
+        effectiveFrom: "",
+        coordinatorName: "",
+        roomNo: "",
+        classCoordinator: ""
       },
       teachers: [],
       subjects: [],
@@ -83,6 +95,9 @@
         MAIN: defaultCampus("MAIN"),
         OFF: defaultCampus("OFF"),
       },
+      // Backend/server config
+      backendUrl: "",
+      serverEnabled: false
     };
   }
 
@@ -99,7 +114,7 @@
   }
 
   async function refreshFromBackendIfPossible() {
-    if (session && session.token) {
+    if (session && session.token && state.serverEnabled && (state.backendUrl || "").trim()) {
       authToken = session.token;
       useBackend = true;
       try {
@@ -175,7 +190,8 @@
       const e = cur + dur;
       const isLunch = intersects(s, e, lunchStart, lunchEnd);
       const isExtraBreak = extraBreaks.some((br) => intersects(s, e, br.start, br.end));
-      slots.push({ start: s, end: e, label: `${formatTime(s)} - ${formatTime(e)}`, isBreak: isLunch || isExtraBreak });
+      const breakType = isLunch ? "lunch" : (isExtraBreak ? "short" : null);
+      slots.push({ start: s, end: e, label: `${formatTime(s)} - ${formatTime(e)}`, isBreak: !!breakType, breakType });
       cur += dur;
     }
     return slots;
@@ -307,7 +323,7 @@
         const unavailable = teacher.unavailability.includes(key);
         if (unavailable) slotCell.classList.add("unavailable");
         if (s.isBreak) slotCell.classList.add("break");
-        slotCell.textContent = s.isBreak ? "Break" : "";
+        slotCell.textContent = s.isBreak ? (s.breakType === "lunch" ? "Lunch" : "Break") : "";
         slotCell.onclick = () => {
           if (s.isBreak) return;
           const pos = teacher.unavailability.indexOf(key);
@@ -520,8 +536,20 @@
       logoPreview.append(img);
     }
 
+    // New: print/export meta
+    qs("#wef-date").value = c.config.effectiveFrom || "";
+    qs("#program-title").value = c.config.programTitle || "";
+    qs("#term-title").value = c.config.termTitle || "";
+    qs("#coordinator-name").value = c.config.coordinatorName || "";
+    qs("#room-no").value = c.config.roomNo || "";
+    qs("#class-coordinator").value = c.config.classCoordinator || "";
+
+    // Backend/auth
     qs("#config-username").value = c.credentials.username;
     qs("#config-password").value = c.credentials.password;
+    qs("#backend-url").value = state.backendUrl || "";
+    qs("#enable-server").checked = !!state.serverEnabled;
+
     qs("#config-saved").textContent = "";
   }
 
@@ -533,8 +561,23 @@
     c.config.lectureDuration = Number(qs("#lecture-duration").value);
     c.config.lunchTime = qs("#lunch-time").value;
     c.config.lunchDuration = Number(qs("#lunch-duration").value);
+
+    // New meta
+    c.config.effectiveFrom = qs("#wef-date").value || "";
+    c.config.programTitle = qs("#program-title").value.trim();
+    c.config.termTitle = qs("#term-title").value.trim();
+    c.config.coordinatorName = qs("#coordinator-name").value.trim();
+    c.config.roomNo = qs("#room-no").value.trim();
+    c.config.classCoordinator = qs("#class-coordinator").value.trim();
+
+    // Credentials
     c.credentials.username = qs("#config-username").value.trim() || c.credentials.username;
     c.credentials.password = qs("#config-password").value;
+
+    // Backend
+    state.backendUrl = (qs("#backend-url").value || "").trim();
+    state.serverEnabled = qs("#enable-server").checked;
+
     saveState(state);
     qs("#config-saved").textContent = "Saved";
     renderTopbar();
@@ -782,7 +825,7 @@
           cell.append(chip);
         } else {
           cell.classList.add("empty");
-          if (s.isBreak) cell.textContent = "Break";
+          if (s.isBreak) cell.textContent = s.breakType === "lunch" ? "Lunch" : "Break";
           if (!s.isBreak) cell.textContent = "";
         }
 
@@ -872,34 +915,138 @@
     qs("#generation-status").textContent = "Cleared.";
   }
 
+  function uniqueSubjectsFor(branch, semester) {
+    const c = campusData();
+    return c.subjects.filter((s) => s.branch === branch && s.semester === semester);
+  }
+
+  function teacherNameForSubject(s) {
+    const t = subjectPrimaryTeacher(s);
+    return t ? t.name : "";
+  }
+
+  function buildExportHTML({ grid, slots, branch, semester }) {
+    const c = campusData();
+    const meta = c.config;
+    const times = slots.map((s) => s.label);
+    const dayRows = DAYS.map((day, di) => {
+      const tds = slots.map((s, si) => {
+        if (s.isBreak) {
+          const lab = s.breakType === "lunch" ? "LUNCH BREAK" : "SHORT BREAK";
+          return `<td class="break"><div class="vertical">${lab}</div></td>`;
+        }
+        const cell = grid[di][si];
+        return `<td>${cell && cell.code ? cell.code : ""}</td>`;
+      }).join("");
+      return `<tr><th class="day">${day.toUpperCase()}</th>${tds}</tr>`;
+    }).join("");
+
+    const subjRows = uniqueSubjectsFor(branch, semester).map((s) => {
+      const fac = teacherNameForSubject(s);
+      return `<tr><td>${s.code}</td><td>${s.name}</td><td>${fac}</td></tr>`;
+    }).join("");
+
+    const logoImg = meta.logoDataUrl ? `<img class="logo" src="${meta.logoDataUrl}" />` : "";
+
+    return `
+<style>
+  .export-wrap { font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #000; }
+  .header { text-align: center; }
+  .inst { font-weight: 700; font-size: 16px; }
+  .college { font-weight: 700; font-size: 20px; }
+  .sub { font-size: 13px; }
+  .meta { display: flex; justify-content: space-between; font-size: 12px; margin: 6px 0; }
+  .logo { height: 60px; float: left; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { border: 1px solid #111; padding: 6px; text-align: center; vertical-align: middle; font-size: 12px; }
+  th.day { width: 110px; }
+  thead th { font-weight: 700; }
+  td.break { position: relative; background: #fafafa; width: 54px; }
+  .vertical { writing-mode: vertical-rl; transform: rotate(180deg); font-weight: 700; color: #444; }
+  .footer { display: grid; grid-template-columns: 1fr 340px; gap: 12px; margin-top: 14px; }
+  .map table td, .map table th { font-size: 12px; }
+  .right td { text-align: left; }
+  .label { width: 140px; font-weight: 700; }
+  .title { font-weight: 700; text-transform: uppercase; margin: 6px 0; }
+</style>
+<div class="export-wrap">
+  ${logoImg}
+  <div class="header">
+    <div class="college">${meta.collegeName || "Your College"}</div>
+    <div class="inst">INSTITUTE OF ENGINEERING & SCIENCE ${meta.campusCode === "OFF" ? "OFF CAMPUS - 1" : ""}</div>
+    <div class="sub">${meta.programTitle || ""}</div>
+    <div class="title">${meta.termTitle || "TIME-TABLE"}</div>
+  </div>
+  <div class="meta">
+    <div>W.E.F.: ${meta.effectiveFrom || ""}</div>
+    <div>Coordinator: ${meta.coordinatorName || ""}</div>
+    <div>Room No.: ${meta.roomNo || ""}</div>
+  </div>
+  <table class="tt">
+    <thead>
+      <tr>
+        <th>DAY / TIME</th>
+        ${times.map((t) => `<th>${t}</th>`).join("")}
+      </tr>
+    </thead>
+    <tbody>
+      ${dayRows}
+    </tbody>
+  </table>
+  <div class="footer">
+    <div class="map">
+      <table>
+        <thead><tr><th>Subject Code</th><th>Subject Name</th><th>Faculty Name</th></tr></thead>
+        <tbody>${subjRows}</tbody>
+      </table>
+    </div>
+    <div class="right">
+      <table>
+        <tr><td class="label">Class Coordinator</td><td>${meta.classCoordinator || ""}</td></tr>
+        <tr><td class="label">Branch</td><td>${branch}</td></tr>
+        <tr><td class="label">Semester</td><td>${semester}</td></tr>
+      </table>
+    </div>
+  </div>
+</div>`;
+  }
+
   async function exportPDF() {
     const c = campusData();
-    const gridEl = qs("#timetable-grid");
-    const { jsPDF } = window.jspdf;
-    const canvas = await html2canvas(gridEl, { scale: 2, backgroundColor: null });
-    const imgData = canvas.toDataURL("image/png");
-    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-
-    const margin = 24;
-    if (c.config.logoDataUrl) {
-      doc.addImage(c.config.logoDataUrl, "PNG", margin, margin, 80, 80);
-    }
-    doc.setFontSize(16);
-    doc.text(`${c.config.collegeName} — ${c.config.campusCode === "MAIN" ? "Main Campus" : "Off-Campus"}`, margin + 90, margin + 24);
+    const cfg = c.config;
+    const slots = generateSlots(cfg);
+    const grid = captureGridFromDom(slots.length);
     const branch = qs("#tt-branch").value;
     const sem = Number(qs("#tt-sem").value);
-    doc.setFontSize(12);
-    doc.text(`Branch: ${branch} | Semester: ${sem}`, margin + 90, margin + 46);
 
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const maxWidth = pageWidth - margin * 2;
+    // Build hidden export container
+    const container = document.createElement("div");
+    container.style.position = "fixed";
+    container.style.left = "-9999px";
+    container.style.top = "0";
+    container.style.width = "1120px";
+    container.innerHTML = buildExportHTML({ grid, slots, branch, semester: sem });
+    document.body.appendChild(container);
+
+    const { jsPDF } = window.jspdf;
+    const canvas = await html2canvas(container, { scale: 2, backgroundColor: "#ffffff" });
+    const imgData = canvas.toDataURL("image/png");
+
+    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+    const margin = 20;
+    const pageWidth = doc.internal.pageSize.getWidth() - margin * 2;
+    const pageHeight = doc.internal.pageSize.getHeight() - margin * 2;
+
     const imgW = canvas.width;
     const imgH = canvas.height;
-    const scale = Math.min(maxWidth / imgW, 530 / imgH);
+    const scale = Math.min(pageWidth / imgW, pageHeight / imgH);
     const renderW = imgW * scale;
     const renderH = imgH * scale;
-    doc.addImage(imgData, "PNG", margin, margin + 90, renderW, renderH);
+
+    doc.addImage(imgData, "PNG", margin, margin, renderW, renderH);
     doc.save(`Timetable_${branch}_Sem${sem}.pdf`);
+
+    document.body.removeChild(container);
   }
 
   function exportExcel() {
@@ -911,40 +1058,74 @@
     const cfg = c.config;
     const slots = generateSlots(cfg);
     const grid = captureGridFromDom(slots.length);
-
-    const data = [];
-    const header = ["Day \\ Time", ...slots.map((s) => s.label)];
-    data.push(header);
-    DAYS.forEach((day, di) => {
-      const row = [day];
-      grid[di].forEach((cell, si) => {
-        if (slots[si].isBreak) row.push("Break");
-        else row.push(cell ? cell.code : "");
-      });
-      data.push(row);
-    });
-
-    const ws = XLSX.utils.aoa_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Timetable");
     const branch = qs("#tt-branch").value;
     const sem = Number(qs("#tt-sem").value);
+
+    const N = slots.length + 1; // +1 for Day column
+    const aoa = [];
+    const merges = [];
+
+    // Title rows
+    aoa.push([c.config.collegeName || "Your College"]);
+    merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: N - 1 } });
+
+    aoa.push(["INSTITUTE OF ENGINEERING & SCIENCE" + (c.config.campusCode === "OFF" ? " OFF CAMPUS - 1" : "")]);
+    merges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: N - 1 } });
+
+    aoa.push([c.config.programTitle || ""]);
+    merges.push({ s: { r: 2, c: 0 }, e: { r: 2, c: N - 1 } });
+
+    aoa.push([c.config.termTitle || "TIME-TABLE"]);
+    merges.push({ s: { r: 3, c: 0 }, e: { r: 3, c: N - 1 } });
+
+    aoa.push([`W.E.F.: ${c.config.effectiveFrom || ""}`, "", "", "", `Coordinator: ${c.config.coordinatorName || ""}`, "", "", "", `Room No.: ${c.config.roomNo || ""}`]);
+    // No merges for this detail row to keep it simple
+
+    // Header row
+    aoa.push(["DAY / TIME", ...slots.map((s) => s.label)]);
+
+    // Day rows
+    DAYS.forEach((day, di) => {
+      const row = [day.toUpperCase()];
+      slots.forEach((s, si) => {
+        if (s.isBreak) row.push(s.breakType === "lunch" ? "LUNCH BREAK" : "SHORT BREAK");
+        else {
+          const cell = grid[di][si];
+          row.push(cell && cell.code ? cell.code : "");
+        }
+      });
+      aoa.push(row);
+    });
+
+    // Blank row
+    aoa.push([]);
+
+    // Subject mapping
+    aoa.push(["Subject Code", "Subject Name", "Faculty Name"]);
+    uniqueSubjectsFor(branch, sem).forEach((s) => {
+      aoa.push([s.code, s.name, teacherNameForSubject(s)]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!merges"] = merges;
+    ws["!cols"] = Array.from({ length: N }, () => ({ wch: 16 }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Timetable");
     XLSX.writeFile(wb, `Timetable_${branch}_Sem${sem}.xlsx`);
     qs("#generation-status").textContent = "Excel exported.";
   }
 
   function printTimetable() {
-    const gridEl = qs("#timetable-grid");
-    if (!gridEl) {
-      window.print();
-      return;
-    }
-    const gridHtml = gridEl.outerHTML;
-    const cols = gridEl.style.getPropertyValue("--cols") || "";
+    const c = campusData();
+    const cfg = c.config;
+    const slots = generateSlots(cfg);
+    const grid = captureGridFromDom(slots.length);
+    const branch = qs("#tt-branch").value;
+    const sem = Number(qs("#tt-sem").value);
 
     const w = window.open("", "_blank");
     if (!w) {
-      window.print();
       return;
     }
     const html = `<!DOCTYPE html>
@@ -953,23 +1134,13 @@
   <meta charset="utf-8">
   <title>Timetable Print</title>
   <style>
-    body { margin: 20px; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #000; }
-    .grid { display: grid; border: 1px solid #ccc; border-radius: 6px; overflow: hidden; }
-    .row { display: grid; grid-template-columns: 140px repeat(var(--cols), 1fr); border-bottom: 1px solid #ccc; }
-    .cell { padding: 8px; border-right: 1px solid #ccc; min-height: 46px; }
-    .cell.header, .cell.day { background: #f3f4f6; font-weight: 600; }
-    .cell.break { background: #f6f6f6; color: #555; }
-    .chip { display: inline-block; padding: 6px 8px; border: 1px solid #ddd; border-radius: 14px; }
-    @page { margin: 20mm; }
+    @page { margin: 12mm; }
+    body { margin: 10px; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #000; }
   </style>
 </head>
 <body>
-${gridHtml}
-<script>
-  const grid = document.querySelector(".grid");
-  if (grid) grid.style.setProperty("--cols", "${cols}");
-  window.onload = function() { window.print(); setTimeout(function(){ window.close(); }, 200); };
-</script>
+${buildExportHTML({ grid, slots, branch, semester: sem })}
+<script>window.onload = function(){ window.print(); setTimeout(function(){ window.close(); }, 200); };</script>
 </body>
 </html>`;
     w.document.open();
@@ -982,7 +1153,7 @@ ${gridHtml}
     const u = qs("#login-username").value.trim();
     const p = qs("#login-password").value;
 
-    // Try backend first
+    // Try backend first (only if enabled and url provided)
     const backendResult = await tryBackendLogin(campus, u, p);
     if (backendResult) {
       session = { campus, username: u, token: authToken };
@@ -1015,6 +1186,35 @@ ${gridHtml}
     setView("login-view");
   }
 
+  function exportDataJson() {
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "timetable_data.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importDataJson(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const obj = JSON.parse(reader.result);
+        if (!obj || !obj.campuses) throw new Error("Invalid data");
+        // Replace state
+        Object.assign(state, defaultState(), obj);
+        saveState(state);
+        renderTopbar();
+        setSubview("dashboard-view");
+        qs("#generation-status").textContent = "Data imported.";
+      } catch {
+        alert("Invalid JSON file.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
   async function init() {
     qs("#login-button").addEventListener("click", () => login());
     qs("#logout-button").addEventListener("click", logout);
@@ -1032,6 +1232,13 @@ ${gridHtml}
     qs("#logo-input").addEventListener("change", handleLogoUpload);
     qs("#save-config-button").addEventListener("click", saveConfig);
 
+    const exportBtn = qs("#export-data-button");
+    if (exportBtn) exportBtn.addEventListener("click", exportDataJson);
+    const importInput = qs("#import-data-input");
+    if (importInput) importInput.addEventListener("change", (e) => {
+      if (e.target.files && e.target.files[0]) importDataJson(e.target.files[0]);
+    });
+
     qs("#tt-branch").addEventListener("change", renderTimetableControls);
     qs("#tt-sem").addEventListener("change", renderTimetableControls);
 
@@ -1042,8 +1249,8 @@ ${gridHtml}
     qs("#excel-button").addEventListener("click", exportExcel);
     qs("#print-button").addEventListener("click", printTimetable);
 
-    // If a backend session exists, refresh campus state
-    if (session && session.token) {
+    // If a backend session exists and backend enabled, refresh campus state
+    if (session && session.token && state.serverEnabled) {
       authToken = session.token;
       useBackend = true;
       try {
