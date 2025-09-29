@@ -903,6 +903,10 @@
   }
 
   function exportExcel() {
+    if (typeof XLSX === "undefined" || !XLSX || !XLSX.utils) {
+      qs("#generation-status").textContent = "Excel export library not loaded.";
+      return;
+    }
     const c = campusData();
     const cfg = c.config;
     const slots = generateSlots(cfg);
@@ -926,10 +930,51 @@
     const branch = qs("#tt-branch").value;
     const sem = Number(qs("#tt-sem").value);
     XLSX.writeFile(wb, `Timetable_${branch}_Sem${sem}.xlsx`);
+    qs("#generation-status").textContent = "Excel exported.";
   }
 
   function printTimetable() {
-    window.print();
+    const gridEl = qs("#timetable-grid");
+    if (!gridEl) {
+      window.print();
+      return;
+    }
+    const gridHtml = gridEl.outerHTML;
+    const cols = gridEl.style.getPropertyValue("--cols") || "";
+
+    const w = window.open("", "_blank");
+    if (!w) {
+      window.print();
+      return;
+    }
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Timetable Print</title>
+  <style>
+    body { margin: 20px; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #000; }
+    .grid { display: grid; border: 1px solid #ccc; border-radius: 6px; overflow: hidden; }
+    .row { display: grid; grid-template-columns: 140px repeat(var(--cols), 1fr); border-bottom: 1px solid #ccc; }
+    .cell { padding: 8px; border-right: 1px solid #ccc; min-height: 46px; }
+    .cell.header, .cell.day { background: #f3f4f6; font-weight: 600; }
+    .cell.break { background: #f6f6f6; color: #555; }
+    .chip { display: inline-block; padding: 6px 8px; border: 1px solid #ddd; border-radius: 14px; }
+    @page { margin: 20mm; }
+  </style>
+</head>
+<body>
+${gridHtml}
+<script>
+  const grid = document.querySelector(".grid");
+  if (grid) grid.style.setProperty("--cols", "${cols}");
+  window.onload = function() { window.print(); setTimeout(function(){ window.close(); }, 200); };
+</script>
+</body>
+</html>`;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
   }
 
   async function login() {
