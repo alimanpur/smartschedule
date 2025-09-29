@@ -158,15 +158,16 @@
       // Backend/server config
       backendUrl: "",
       serverEnabled: false,
-      // Firebase config
-      firebaseEnabled: false,
+      // Firebase config (pre-filled with your project and enabled by default)
+      firebaseEnabled: true,
       firebaseConfig: {
-        apiKey: "",
-        authDomain: "",
-        projectId: "",
-        storageBucket: "",
-        messagingSenderId: "",
-        appId: ""
+        apiKey: "AIzaSyBCrhTXWEyGiNyE-ZgOqw9VkB7taclVlOg",
+        authDomain: "smartschedule-727d1.firebaseapp.com",
+        projectId: "smartschedule-727d1",
+        storageBucket: "smartschedule-727d1.firebasestorage.app",
+        messagingSenderId: "957159641853",
+        appId: "1:957159641853:web:d0e425ca3794ec9b476494",
+        measurementId: "G-SBQFMTL2X3"
       }
     };
   }
