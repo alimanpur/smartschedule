@@ -647,10 +647,12 @@
     // Backend/auth
     qs("#config-username").value = c.credentials.username;
     qs("#config-password").value = c.credentials.password;
-    qs("#backend-url").value = state.backendUrl || "";
-    qs("#enable-server").checked = !!state.serverEnabled;
+    const beUrlEl = qs("#backend-url");
+    if (beUrlEl) beUrlEl.value = state.backendUrl || "";
+    const beEnabledEl = qs("#enable-server");
+    if (beEnabledEl) beEnabledEl.checked = !!state.serverEnabled;
 
-    // Firebase
+    // Firebase (only if admin fields exist)
     if (qs("#fb-apiKey")) {
       const fbc = state.firebaseConfig || {};
       qs("#fb-apiKey").value = fbc.apiKey || "";
@@ -659,7 +661,8 @@
       qs("#fb-storageBucket").value = fbc.storageBucket || "";
       qs("#fb-messagingSenderId").value = fbc.messagingSenderId || "";
       qs("#fb-appId").value = fbc.appId || "";
-      qs("#enable-firebase").checked = !!state.firebaseEnabled;
+      const fbEnabledEl = qs("#enable-firebase");
+      if (fbEnabledEl) fbEnabledEl.checked = !!state.firebaseEnabled;
     }
 
     qs("#config-saved").textContent = "";
@@ -686,20 +689,25 @@
     c.credentials.username = qs("#config-username").value.trim() || c.credentials.username;
     c.credentials.password = qs("#config-password").value;
 
-    // Backend
-    state.backendUrl = (qs("#backend-url").value || "").trim();
-    state.serverEnabled = qs("#enable-server").checked;
+    // Backend (only if admin fields exist)
+    const beUrlEl2 = qs("#backend-url");
+    const beEnabledEl2 = qs("#enable-server");
+    if (beUrlEl2) state.backendUrl = (beUrlEl2.value || "").trim();
+    if (beEnabledEl2) state.serverEnabled = beEnabledEl2.checked;
 
-    // Firebase
-    state.firebaseConfig = {
-      apiKey: (qs("#fb-apiKey").value || "").trim(),
-      authDomain: (qs("#fb-authDomain").value || "").trim(),
-      projectId: (qs("#fb-projectId").value || "").trim(),
-      storageBucket: (qs("#fb-storageBucket").value || "").trim(),
-      messagingSenderId: (qs("#fb-messagingSenderId").value || "").trim(),
-      appId: (qs("#fb-appId").value || "").trim()
-    };
-    state.firebaseEnabled = qs("#enable-firebase").checked;
+    // Firebase (only if admin fields exist)
+    const fbEnabledEl2 = qs("#enable-firebase");
+    if (fbEnabledEl2) {
+      state.firebaseConfig = {
+        apiKey: (qs("#fb-apiKey").value || "").trim(),
+        authDomain: (qs("#fb-authDomain").value || "").trim(),
+        projectId: (qs("#fb-projectId").value || "").trim(),
+        storageBucket: (qs("#fb-storageBucket").value || "").trim(),
+        messagingSenderId: (qs("#fb-messagingSenderId").value || "").trim(),
+        appId: (qs("#fb-appId").value || "").trim()
+      };
+      state.firebaseEnabled = fbEnabledEl2.checked;
+    }
 
     saveState(state);
     initFirebaseIfEnabled();
