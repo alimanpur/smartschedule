@@ -78,8 +78,13 @@
           doc: fsMod.doc,
           getDoc: fsMod.getDoc,
           setDoc: fsMod.setDoc,
+          collection: fsMod.collection,
+          getDocs: fsMod.getDocs,
+          updateDoc: fsMod.updateDoc,
+          deleteDoc: fsMod.deleteDoc,
           getAuth: authMod.getAuth,
           signInWithEmailAndPassword: authMod.signInWithEmailAndPassword,
+          createUserWithEmailAndPassword: authMod.createUserWithEmailAndPassword,
           setPersistence: authMod.setPersistence,
           browserLocalPersistence: authMod.browserLocalPersistence,
           signOut: authMod.signOut
@@ -312,13 +317,15 @@
     if (id === "subjects-view") renderSubjects();
     if (id === "config-view") renderConfig();
     if (id === "timetable-view") renderTimetableControls();
+    if (id === "admin-view") renderAdmin();
   }
 
   function renderTopbar() {
     const c = campusData();
     qs("#college-name").textContent = c.config.collegeName || "Your College";
     qs("#campus-name").textContent = c.config.campusCode === "MAIN" ? "Main Campus" : "Off-Campus";
-    qs("#username-display").textContent = c.credentials.username;
+    const display = (session && session.username) ? session.username : "";
+    qs("#username-display").textContent = display;
   }
 
   function renderDashboard() {
@@ -644,12 +651,11 @@
     qs("#room-no").value = c.config.roomNo || "";
     qs("#class-coordinator").value = c.config.classCoordinator || "";
 
-    // Backend/auth
-    qs("#config-username").value = c.credentials.username;
-    qs("#config-password").value = c.credentials.password;
+    // Backend/auth (guard for removed fields)
+    if (qs("#config-username")) qs("#config-username").value = c.credentials.username;
+    if (qs("#config-password")) qs("#config-password").value = c.credentials.password;
     const beUrlEl = qs("#backend-url");
-    if (beUrlEl) beUrlEl.value = state.backendUrl || "";
-    const beEnabledEl = qs("#enable-server");
+    if (e-server");
     if (beEnabledEl) beEnabledEl.checked = !!state.serverEnabled;
 
     // Firebase (only if admin fields exist)
@@ -685,9 +691,11 @@
     c.config.roomNo = qs("#room-no").value.trim();
     c.config.classCoordinator = qs("#class-coordinator").value.trim();
 
-    // Credentials
-    c.credentials.username = qs("#config-username").value.trim() || c.credentials.username;
-    c.credentials.password = qs("#config-password").value;
+    // Credentials (legacy - only if fields exist)
+    const cfgUserEl = qs("#config-username");
+    const cfgPassEl = qs("#config-password");
+    if (cfgUserEl) c.credentials.username = cfgUserEl.value.trim() || c.credentials.username;
+    if (cfgPassEl) c.credentials.password = cfgPassEl.value;
 
     // Backend (only if admin fields exist)
     const beUrlEl2 = qs("#backend-url");
@@ -1280,83 +1288,205 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     w.document.close();
   }
 
-  async function login() {
-    const campus = qs("#login-campus").value;
-    const u = qs("#login-username").value.trim();
-    const p = qs("#login-password").value;
+  // -----------------------
+  // Admin mode & Admin Panel
+  // -----------------------
+  let adminMode = false;
 
-    // Firebase first if enabled
-    if (state.firebaseEnabled) {
-      await initFirebaseIfEnabled();
+  function applyAdminVisibility() {
+    const nav = qs(".admin-nav");
+    if (nav) nav.style.display = adminMode ? "inline-block" : "none";
+  }
 
-      // Try Firebase Auth (email/password). Use email in the username field.
-      if (window._fbAuth && u && p && u.includes("@")) {
-        try {
-          const M = window._fbMods;
-          const cred = await M.signInWithEmailAndPassword(window._fbAuth, u, p);
-          session = { campus, username: u, uid: cred.user && cred.user.uid };
-          saveSession(session);
-          qs("#login-error").textContent = "";
-          await fbLoadCampus(campus); // pull latest campus data post-auth
-          setView("main-view");
-          renderTopbar();
-          setSubview("dashboard-view");
-          return;
-        } catch (e) {
-          // Fall through to Firestore-stored credentials
-        }
+  function setAdminMode(flag) {
+    adminMode = !!flag;
+    try { localStorage.setItem("ttg_admin", adminMode ? "1" : "0"); } catch {}
+    applyAdminVisibility();
+  }
+
+  function detectAdminModeAtStart() {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get("admin") === "1") {
+        setAdminMode(true);
+        return;
       }
-
-      // Fallback to credentials stored in Firestore campus document
-      const loaded = await fbLoadCampus(campus);
-      if (loaded) {
-        const creds = loaded.credentials;
-        if (u === creds.username && p === creds.password) {
-          session = { campus, username: u };
-          saveSession(session);
-          qs("#login-error").textContent = "";
-          setView("main-view");
-          renderTopbar();
-          setSubview("dashboard-view");
-          return;
-        }
+      if ((localStorage.getItem("ttg_admin") || "") === "1") {
+        setAdminMode(true);
       }
-      qs("#login-error").textContent = "Invalid credentials";
+    } catch {}
+  }
+
+  async function adminCreateHOD() {
+    if (!adminMode) return;
+    await initFirebaseIfEnabled();
+    const M = window._fbMods; const db = window._fbDb;
+    if (!M || !db || !window._fbApp) {
+      const s = qs("#admin-create-status"); if (s) s.textContent = "Firebase not configured.";
       return;
     }
-
-    // Try backend first (only if enabled and url provided)
-    const backendResult = await tryBackendLogin(campus, u, p);
-    if (backendResult) {
-      session = { campus, username: u, token: authToken };
-      qs("#login-error").textContent = "";
-      setView("main-view");
-      renderTopbar();
-      setSubview("dashboard-view");
-      return;
-    }
-
-    // Fallback to local credentials
-    const creds = state.campuses[campus].credentials;
-    if (u === creds.username && p === creds.password) {
-      session = { campus, username: u };
-      saveSession(session);
-      qs("#login-error").textContent = "";
-      setView("main-view");
-      renderTopbar();
-      setSubview("dashboard-view");
-    } else {
-      qs("#login-error").textContent = "Invalid credentials";
+    const email = (qs("#admin-hod-email").value || "").trim();
+    const password = (qs("#admin-hod-password").value || "").trim();
+    const campuses = [];
+    if (qs("#admin-campus-main") && qs("#admin-campus-main").checked) campuses.push("MAIN");
+    if (qs("#admin-campus-off") && qs("#admin-campus-off").checked) campuses.push("OFF");
+    const statusEl = qs("#admin-create-status");
+    if (!email || !password || campuses.length === 0) { if (statusEl) statusEl.textContent = "Provide email, password and at least one campus."; return; }
+    try {
+      if (!window._fbSecApp) {
+        window._fbSecApp = M.initializeApp(state.firebaseConfig || {}, "ttg-admin-secondary");
+        window._fbSecAuth = M.getAuth(window._fbSecApp);
+      }
+      const cred = await M.createUserWithEmailAndPassword(window._fbSecAuth, email, password);
+      const uid = cred.user && cred.user.uid;
+      if (!uid) throw new Error("No UID from Firebase Auth");
+      await M.setDoc(M.doc(db, "hods", uid), { email, campuses });
+      if (statusEl) statusEl.textContent = "HOD created and assigned.";
+      qs("#admin-hod-email").value = "";
+      qs("#admin-hod-password").value = "";
+      adminRefreshHodsList();
+      try { await M.signOut(window._fbSecAuth); } catch {}
+    } catch (e) {
+      if (statusEl) statusEl.textContent = "Error: " + (e && e.message ? e.message : "failed");
     }
   }
 
-  function logout() {
+  async function adminRefreshHodsList() {
+    const list = qs("#admin-hods-list");
+    if (!list) return;
+    list.innerHTML = "";
+    await initFirebaseIfEnabled();
+    const M = window._fbMods; const db = window._fbDb;
+    if (!M || !db) { list.textContent = "Firebase not connected."; return; }
+    try {
+      const snap = await M.getDocs(M.collection(db, "hods"));
+      const rows = [];
+      snap.forEach((docSnap) => {
+        const d = docSnap.data();
+        const uid = docSnap.id;
+        const email = d.email || "";
+        const campuses = Array.isArray(d.campuses) ? d.campuses.join(", ") : "";
+        const row = document.createElement("div");
+        row.className = "table-row";
+        const c1 = document.createElement("div"); c1.textContent = email;
+        const c2 = document.createElement("div"); c2.textContent = campuses;
+        const c3 = document.createElement("div");
+        const btnEdit = document.createElement("button"); btnEdit.className = "btn"; btnEdit.textContent = "Edit";
+        btnEdit.addEventListener("click", async () => {
+          const current = Array.isArray(d.campuses) ? d.campuses.join(",") : "";
+          const val = prompt("Enter campuses CSV (e.g., MAIN,OFF)", current);
+          if (val !== null) {
+            const arr = val.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+            await M.updateDoc(M.doc(db, "hods", uid), { campuses: arr });
+            adminRefreshHodsList();
+          }
+        });
+        const btnDel = document.createElement("button"); btnDel.className = "btn danger"; btnDel.textContent = "Remove";
+        btnDel.addEventListener("click", async () => {
+          if (!confirm("Remove this HOD mapping?")) return;
+          await M.deleteDoc(M.doc(db, "hods", uid));
+          adminRefreshHodsList();
+        });
+        c3.append(btnEdit, btnDel);
+        row.append(c1, c2, c3);
+        rows.push(row);
+      });
+      rows.forEach(r => list.append(r));
+      if (rows.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "muted";
+        empty.textContent = "No HODs found.";
+        list.append(empty);
+      }
+    } catch (e) {
+      list.textContent = "Failed to load HODs. Check Firestore rules.";
+    }
+  }
+
+  function renderAdmin() {
+    // Prefill server and Firebase settings
+    const beUrlEl = qs("#backend-url"); if (beUrlEl) beUrlEl.value = state.backendUrl || "";
+    const beEnabledEl = qs("#enable-server"); if (beEnabledEl) beEnabledEl.checked = !!state.serverEnabled;
+    if (qs("#fb-apiKey")) {
+      const fbc = state.firebaseConfig || {};
+      qs("#fb-apiKey").value = fbc.apiKey || "";
+      qs("#fb-authDomain").value = fbc.authDomain || "";
+      qs("#fb-projectId").value = fbc.projectId || "";
+      qs("#fb-storageBucket").value = fbc.storageBucket || "";
+      qs("#fb-messagingSenderId").value = fbc.messagingSenderId || "";
+      qs("#fb-appId").value = fbc.appId || "";
+      const fbEnabledEl = qs("#enable-firebase"); if (fbEnabledEl) fbEnabledEl.checked = !!state.firebaseEnabled;
+    }
+    adminRefreshHodsList();
+  }
+
+  function adminSaveServerSettings() {
+    const beUrlEl = qs("#backend-url");
+    const beEnabledEl = qs("#enable-server");
+    if (beUrlEl) state.backendUrl = (beUrlEl.value || "").trim();
+    if (beEnabledEl) state.serverEnabled = !!beEnabledEl.checked;
+    if (qs("#fb-apiKey")) {
+      state.firebaseConfig = {
+        apiKey: (qs("#fb-apiKey").value || "").trim(),
+        authDomain: (qs("#fb-authDomain").value || "").trim(),
+        projectId: (qs("#fb-projectId").value || "").trim(),
+        storageBucket: (qs("#fb-storageBucket").value || "").trim(),
+        messagingSenderId: (qs("#fb-messagingSenderId").value || "").trim(),
+        appId: (qs("#fb-appId").value || "").trim()
+      };
+      const fbEnabledEl = qs("#enable-firebase");
+      if (fbEnabledEl) state.firebaseEnabled = !!fbEnabledEl.checked;
+    }
+    saveState(state);
+    initFirebaseIfEnabled();
+    const status = qs("#config-saved"); if (status) status.textContent = "Server settings saved";
+  }
+
+  async function login() {
+    const campus = qs("#login-campus").value;
+    const email = qs("#login-username").value.trim();
+    const password = qs("#login-password").value;
+
+    if (!email || !email.includes("@")) {
+      qs("#login-error").textContent = "Please enter a valid email.";
+      return;
+    }
+    if (!password) {
+      qs("#login-error").textContent = "Please enter your password.";
+      return;
+    }
+
+    await initFirebaseIfEnabled();
+    if (!state.firebaseEnabled || !window._fbAuth) {
+      qs("#login-error").textContent = "Firebase authentication is not enabled. Contact the administrator.";
+      return;
+    }
+
+    try {
+      const M = window._fbMods;
+      const cred = await M.signInWithEmailAndPassword(window._fbAuth, email, password);
+      session = { campus, username: email, uid: cred.user && cred.user.uid };
+      saveSession(session);
+      qs("#login-error").textContent = "";
+      await fbLoadCampus(campus);
+      setView("main-view");
+      renderTopbar();
+      setSubview("dashboard-view");
+    } catch (e) {
+      qs("#login-error").textContent = "Invalid email or password.";
+    }
+  }
+
+  async function logout() {
     clearSession();
     session = null;
     authToken = null;
     useBackend = false;
-    setView("login-view");
-  }
+    if (window._fbAuth && window._fbMods) {
+      try { await window._fbMods.signOut(window._fbAuth); } catch {}
+    }
+    setView("login-view");_code
+ new </}
 
   function exportDataJson() {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
@@ -1388,6 +1518,15 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
   }
 
   async function init() {
+    // Admin mode detection and hotkey toggle
+    detectAdminModeAtStart();
+    applyAdminVisibility();
+    document.addEventListener("keydown", (e) => {
+      if (e.ctrlKey && e.shiftKey && (e.key === "A" || e.key === "a")) {
+        setAdminMode(!adminMode);
+      }
+    });
+
     qs("#login-button").addEventListener("click", () => login());
     qs("#logout-button").addEventListener("click", logout);
     qs("#modal-close").addEventListener("click", closeModal);
@@ -1419,6 +1558,20 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     if (syncNow) syncNow.addEventListener("click", async () => {
       await syncCampusToFirebase();
       qs("#config-saved").textContent = "Synced with Firebase.";
+    });
+
+    // Admin panel events
+    const adminCreateBtn = qs("#admin-create-hod-button");
+    if (adminCreateBtn) adminCreateBtn.addEventListener("click", adminCreateHOD);
+    const adminRefreshBtn = qs("#admin-refresh-hods-button");
+    if (adminRefreshBtn) adminRefreshBtn.addEventListener("click", adminRefreshHodsList);
+    const adminSaveServerBtn = qs("#admin-save-server-settings");
+    if (adminSaveServerBtn) adminSaveServerBtn.addEventListener("click", adminSaveServerSettings);
+    const adminExportBtn = qs("#admin-export-data-button");
+    if (adminExportBtn) adminExportBtn.addEventListener("click", exportDataJson);
+    const adminImportInput = qs("#admin-import-data-input");
+    if (adminImportInput) adminImportInput.addEventListener("change", (e) => {
+      if (e.target.files && e.target.files[0]) importDataJson(e.target.files[0]);
     });
 
     qs("#tt-branch").addEventListener("change", renderTimetableControls);
