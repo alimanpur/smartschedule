@@ -53,6 +53,66 @@
     } catch {}
   }
 
+  // Firebase integration
+  function firebaseReady() {
+    return !!(window.firebase && window.firebase.apps && window.firebase.apps.length && window._fbDb);
+  }
+
+  async function initFirebaseIfEnabled() {
+    if (!state.firebaseEnabled) return;
+    const cfg = state.firebaseConfig || {};
+    if (!cfg.apiKey || !cfg.projectId || !cfg.appId) return;
+    try {
+      if (!window.firebase || !window.firebase.initializeApp) return;
+      if (!window.firebase.apps || !window.firebase.apps.length) {
+        window._fbApp = window.firebase.initializeApp(cfg);
+        window._fbDb = window.firebase.firestore();
+        try { await window._fbDb.enablePersistence(); } catch {}
+      } else {
+        window._fbApp = window.firebase.app();
+        window._fbDb = window.firebase.firestore();
+      }
+    } catch {}
+  }
+
+  async function fbLoadCampus(campus) {
+    if (!state.firebaseEnabled) return null;
+    await initFirebaseIfEnabled();
+    const db = window._fbDb;
+    if (!db) return null;
+    try {
+      const ref = db.collection("campuses").doc(campus);
+      const snap = await ref.get();
+      if (snap.exists) {
+        state.campuses[campus] = snap.data();
+        return state.campuses[campus];
+      } else {
+        const dc = defaultCampus(campus);
+        await ref.set(dc);
+        state.campuses[campus] = dc;
+        return dc;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  async function fbSaveCampus(campus) {
+    if (!state.firebaseEnabled) return;
+    await initFirebaseIfEnabled();
+    const db = window._fbDb;
+    if (!db) return;
+    try {
+      const ref = db.collection("campuses").doc(campus);
+      await ref.set(state.campuses[campus]);
+    } catch {}
+  }
+
+  async function syncCampusToFirebase() {
+    if (!session || !state.firebaseEnabled) return;
+    try { await fbSaveCampus(session.campus); } catch {}
+  }
+
   function uid(prefix = "") {
     return prefix + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
@@ -97,7 +157,17 @@
       },
       // Backend/server config
       backendUrl: "",
-      serverEnabled: false
+      serverEnabled: false,
+      // Firebase config
+      firebaseEnabled: false,
+      firebaseConfig: {
+        apiKey: "",
+        authDomain: "",
+        projectId: "",
+        storageBucket: "",
+        messagingSenderId: "",
+        appId: ""
+      }
     };
   }
 
@@ -129,6 +199,7 @@
   function saveState(stateObj) {
     localStorage.setItem(LS_KEY, JSON.stringify(stateObj));
     syncCampusToBackend();
+    syncCampusToFirebase();
   }
 
   function loadSession() {
@@ -550,6 +621,18 @@
     qs("#backend-url").value = state.backendUrl || "";
     qs("#enable-server").checked = !!state.serverEnabled;
 
+    // Firebase
+    if (qs("#fb-apiKey")) {
+      const fbc = state.firebaseConfig || {};
+      qs("#fb-apiKey").value = fbc.apiKey || "";
+      qs("#fb-authDomain").value = fbc.authDomain || "";
+      qs("#fb-projectId").value = fbc.projectId || "";
+      qs("#fb-storageBucket").value = fbc.storageBucket || "";
+      qs("#fb-messagingSenderId").value = fbc.messagingSenderId || "";
+      qs("#fb-appId").value = fbc.appId || "";
+      qs("#enable-firebase").checked = !!state.firebaseEnabled;
+    }
+
     qs("#config-saved").textContent = "";
   }
 
@@ -578,7 +661,19 @@
     state.backendUrl = (qs("#backend-url").value || "").trim();
     state.serverEnabled = qs("#enable-server").checked;
 
+    // Firebase
+    state.firebaseConfig = {
+      apiKey: (qs("#fb-apiKey").value || "").trim(),
+      authDomain: (qs("#fb-authDomain").value || "").trim(),
+      projectId: (qs("#fb-projectId").value || "").trim(),
+      storageBucket: (qs("#fb-storageBucket").value || "").trim(),
+      messagingSenderId: (qs("#fb-messagingSenderId").value || "").trim(),
+      appId: (qs("#fb-appId").value || "").trim()
+    };
+    state.firebaseEnabled = qs("#enable-firebase").checked;
+
     saveState(state);
+    initFirebaseIfEnabled();
     qs("#config-saved").textContent = "Saved";
     renderTopbar();
   }
@@ -1153,6 +1248,25 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     const u = qs("#login-username").value.trim();
     const p = qs("#login-password").value;
 
+    // Firebase first if enabled
+    if (state.firebaseEnabled) {
+      const loaded = await fbLoadCampus(campus);
+      if (loaded) {
+        const creds = loaded.credentials;
+        if (u === creds.username && p === creds.password) {
+          session = { campus, username: u };
+          saveSession(session);
+          qs("#login-error").textContent = "";
+          setView("main-view");
+          renderTopbar();
+          setSubview("dashboard-view");
+          return;
+        }
+      }
+      qs("#login-error").textContent = "Invalid credentials";
+      return;
+    }
+
     // Try backend first (only if enabled and url provided)
     const backendResult = await tryBackendLogin(campus, u, p);
     if (backendResult) {
@@ -1238,6 +1352,16 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     if (importInput) importInput.addEventListener("change", (e) => {
       if (e.target.files && e.target.files[0]) importDataJson(e.target.files[0]);
     });
+    const testFb = qs("#test-firebase-button");
+    if (testFb) testFb.addEventListener("click", async () => {
+      await initFirebaseIfEnabled();
+      qs("#config-saved").textContent = window._fbDb ? "Firebase connected." : "Firebase not configured.";
+    });
+    const syncNow = qs("#sync-now-button");
+    if (syncNow) syncNow.addEventListener("click", async () => {
+      await syncCampusToFirebase();
+      qs("#config-saved").textContent = "Synced with Firebase.";
+    });
 
     qs("#tt-branch").addEventListener("change", renderTimetableControls);
     qs("#tt-sem").addEventListener("change", renderTimetableControls);
@@ -1248,6 +1372,14 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     qs("#pdf-button").addEventListener("click", exportPDF);
     qs("#excel-button").addEventListener("click", exportExcel);
     qs("#print-button").addEventListener("click", printTimetable);
+
+    // If Firebase enabled, initialize and optionally refresh campus data
+    if (state.firebaseEnabled) {
+      await initFirebaseIfEnabled();
+      if (session) {
+        await fbLoadCampus(session.campus);
+      }
+    }
 
     // If a backend session exists and backend enabled, refresh campus state
     if (session && session.token && state.serverEnabled) {
