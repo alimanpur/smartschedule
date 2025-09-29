@@ -581,24 +581,43 @@
     const c = campusData();
     const branchSel = qs("#tt-branch");
     const semSel = qs("#tt-sem");
+
+    // Preserve current selections
+    const prevBranch = branchSel.value;
+    const prevSem = semSel.value;
+
+    // Rebuild branch options
     branchSel.innerHTML = "";
     (c.config.branches || []).forEach((b) => {
       const opt = document.createElement("option");
       opt.value = b; opt.textContent = b;
       branchSel.append(opt);
     });
+    // Restore branch selection if possible
+    if (prevBranch && (c.config.branches || []).includes(prevBranch)) {
+      branchSel.value = prevBranch;
+    }
+
+    // Rebuild semester options
     semSel.innerHTML = "";
     (c.config.semesters || []).forEach((s) => {
       const opt = document.createElement("option");
       opt.value = s; opt.textContent = `Semester ${s}`;
       semSel.append(opt);
     });
+    // Restore semester selection if possible
+    if (prevSem && (c.config.semesters || []).map(String).includes(String(prevSem))) {
+      semSel.value = prevSem;
+    }
 
+    // Determine active filters
+    const activeBranch = branchSel.value || ((c.config.branches || [])[0] || "");
+    const activeSem = Number(semSel.value || ((c.config.semesters || [])[0] || 1));
+
+    // Populate subject checkboxes based on filters
     const subsSelect = qs("#tt-subjects-select");
     subsSelect.innerHTML = "";
-    const br = branchSel.value;
-    const sem = Number(semSel.value);
-    const subjects = c.subjects.filter((x) => x.branch === br && x.semester === sem);
+    const subjects = c.subjects.filter((x) => x.branch === activeBranch && x.semester === activeSem);
     subjects.forEach((s) => {
       const ctr = document.createElement("label");
       ctr.style.display = "inline-flex"; ctr.style.alignItems = "center"; ctr.style.gap = "6px";
