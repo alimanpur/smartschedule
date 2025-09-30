@@ -1443,7 +1443,6 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
   }
 
   async function login() {
-    const campus = qs("#login-campus").value;
     const email = qs("#login-username").value.trim();
     const password = qs("#login-password").value;
 
@@ -1462,13 +1461,50 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
       return;
     }
 
+    const M = window._fbMods;
     try {
-      const M = window._fbMods;
+      // 1) Auth with email/password
       const cred = await M.signInWithEmailAndPassword(window._fbAuth, email, password);
-      session = { campus, username: email, uid: cred.user && cred.user.uid };
+      const uid = cred.user && cred.user.uid;
+
+      // 2) Read hods/{uid} to determine assigned campuses
+      const db = window._fbDb;
+      let campuses = [];
+      try {
+        const hodRef = M.doc(db, "hods", uid);
+        const hodSnap = await M.getDoc(hodRef);
+        if (hodSnap.exists()) {
+          const d = hodSnap.data();
+          if (d && Array.isArray(d.campuses)) {
+            campuses = d.campuses.filter((x) => typeof x === "string" && x.trim().length > 0);
+          }
+        }
+      } catch {}
+
+      if (!campuses.length) {
+        // No campus assignment: show explicit message and prevent proceeding
+        qs("#login-error").textContent = "Authentication successful, but you are not assigned to a campus. Please contact an administrator.";
+        try { await M.signOut(window._fbAuth); } catch {}
+        return;
+      }
+
+      // 3) Auto-select first campus and load it
+      const campus = String(campuses[0]).toUpperCase();
+      const loaded = await fbLoadCampus(campus);
+      if (!loaded) {
+        qs("#login-error").textContent = "Could not load your campus data. Please contact an administrator.";
+        try { await M.signOut(window._fbAuth); } catch {}
+        return;
+      }
+
+      // Optional: reflect campus in the login selector (if present)
+      const campusSel = qs("#login-campus");
+      if (campusSel) campusSel.value = campus;
+
+      // 4) Save session and proceed
+      session = { campus, username: email, uid };
       saveSession(session);
       qs("#login-error").textContent = "";
-      await fbLoadCampus(campus);
       setView("main-view");
       renderTopbar();
       setSubview("dashboard-view");
