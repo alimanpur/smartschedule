@@ -280,9 +280,24 @@ body {
   .assign-panel { grid-template-columns: 1fr; }
 }
 
+/* Cloud banner */
+.cloud-banner {
+  position: sticky;
+  top: 0;
+  width: 100%;
+  background: #fff7e6;
+  color: #8a6d3b;
+  border-bottom: 1px solid #ffe58f;
+  padding: 8px 12px;
+  text-align: center;
+  z-index: 20;
+  font-size: 14px;
+}
+
 /* Print */
 @media print {
   body { background: white; color: black; }
+  .cloud-banner { display: none !important; }
   .topbar, .actions, #subjects-palette, .nav, .user-actions, .panel h2, .palette-title { display: none !important; }
   .grid .cell { border: 1px solid #ccc; }
 }

@@ -10,6 +10,28 @@
   let useBackend = false;
   let authToken = null;
 
+  // Cloud sync banner status
+  let cloudOnline = true;
+  let cloudMessage = "";
+
+  function updateCloudBanner() {
+    const el = qs("#cloud-banner");
+    if (!el) return;
+    if (cloudOnline) {
+      el.style.display = "none";
+      el.textContent = "";
+    } else {
+      el.style.display = "block";
+      el.textContent = cloudMessage || (state && state.firebaseEnabled ? "Could not connect to Firestore" : "Cloud Sync is disabled");
+    }
+  }
+
+  function setCloudStatus(online, message) {
+    cloudOnline = !!online;
+    cloudMessage = message || "";
+    updateCloudBanner();
+  }
+
   function getApiBase() {
     const url = (state.backendUrl || "").trim();
     return url || "http://localhost:3000/api";
@@ -59,9 +81,15 @@
   }
 
   async function initFirebaseIfEnabled() {
-    if (!state.firebaseEnabled) return;
+    if (!state.firebaseEnabled) {
+      setCloudStatus(false, "Cloud Sync is disabled");
+      return;
+    }
     const cfg = state.firebaseConfig || {};
-    if (!cfg.apiKey || !cfg.projectId || !cfg.appId) return;
+    if (!cfg.apiKey || !cfg.projectId || !cfg.appId) {
+      setCloudStatus(false, "Cloud Sync is disabled");
+      return;
+    }
 
     try {
       if (!window._fbMods) {
@@ -94,46 +122,64 @@
       window._fbApp = app;
       window._fbDb = M.getFirestore(app);
       try { await M.enableIndexedDbPersistence(window._fbDb); } catch {}
-    } catch {}
+      setCloudStatus(true, "");
+    } catch {
+      setCloudStatus(false, "Could not connect to Firestore");
+    }
   }
 
   async function fbLoadCampus(campus) {
-    if (!state.firebaseEnabled) return null;
+    if (!state.firebaseEnabled) {
+      setCloudStatus(false, "Cloud Sync is disabled");
+      return null;
+    }
     await initFirebaseIfEnabled();
     const db = window._fbDb;
-    if (!db) return null;
+    if (!db) {
+      setCloudStatus(false, "Could not connect to Firestore");
+      return null;
+    }
     try {
       const M = window._fbMods;
       const ref = M.doc(db, "campuses", campus);
       const snap = await M.getDoc(ref);
       if (snap.exists()) {
         state.campuses[campus] = snap.data();
+        setCloudStatus(true, "");
         return state.campuses[campus];
       } else {
         const dc = defaultCampus(campus);
         await M.setDoc(ref, dc);
         state.campuses[campus] = dc;
+        setCloudStatus(true, "");
         return dc;
       }
     } catch {
-      return null;
-    }
-  }
+}
 
   async function fbSaveCampus(campus) {
-    if (!state.firebaseEnabled) return;
+    if (!state.firebaseEnabled) {
+      setCloudStatus(false, "Cloud Sync is disabled");
+      return;
+    }
     await initFirebaseIfEnabled();
     const db = window._fbDb;
-    if (!db) return;
+    if (!db) {
+      setCloudStatus(false, "Could not connect to Firestore");
+      return;
+    }
     try {
       const M = window._fbMods;
       const ref = M.doc(db, "campuses", campus);
       await M.setDoc(ref, state.campuses[campus]);
-    } catch {}
+      setCloudStatus(true, "");
+    } catch {
+      setCloudStatus(false, "Could not connect to Firestore");
+    }
   }
 
   async function syncCampusToFirebase() {
-    if (!session || !state.firebaseEnabled) return;
+    if (!session || !state.firebaseEnabled || !cloudOnline) return;
     try { await fbSaveCampus(session.campus); } catch {}
   }
 
@@ -1456,12 +1502,12 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
       return;
     }
 
-    // Initialize Firestore and load campus document
+    // Initialize Firestore and attempt to load campus; allow local-only fallback
     await initFirebaseIfEnabled();
     const campus = info.campus;
-    const loaded = await fbLoadCampus(campus);
-    if (!loaded) {
-      qs("#login-error").textContent = "Login succeeded, but campus data could not be loaded. Please contact an administrator.";
+    let loaded = null;
+    try {
+      loaded = await fbror").textContent = "Login succeeded, but campus data could not be loaded. Please contact an administrator.";
       return;
     }
 
