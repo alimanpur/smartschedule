@@ -14,15 +14,57 @@
   let cloudOnline = true;
   let cloudMessage = "";
 
+  function updateDiagnostics() {
+    const diagCloud = qs("#diag-cloud");
+    const diagCfg = qs("#diag-config");
+    if (diagCfg) {
+      if (!state.firebaseEnabled) diagCfg.textContent = "Disabled";
+      else {
+        const cfg = state.firebaseConfig || {};
+        const ok = !!(cfg.apiKey && cfg.projectId && cfg.appId);
+        diagCfg.textContent = ok ? "Present" : "Incomplete";
+      }
+    }
+    if (diagCloud) {
+      if (!state.firebaseEnabled) diagCloud.textContent = "Disabled";
+      else diagCloud.textContent = cloudOnline ? "Connected" : "Disconnected";
+    }
+  }
+
+  async function reconnectToCloud() {
+    await initFirebaseIfEnabled();
+    // If logged in, try to reload current campus from Firestore
+    if (session && state.firebaseEnabled && window._fbDb) {
+      try {
+        const loaded = await fbLoadCampus(session.campus);
+        if (loaded) {
+          setCloudStatus(true, "");
+          renderTopbar();
+          // Optionally re-render open subview to reflect any cloud-loaded changes
+          const active = document.querySelector(".subview.active");
+          if (active) {
+            const id = active.id;
+            setSubview(id);
+          }
+        }
+      } catch {
+        // leave banner as is
+      }
+    }
+  }
+
   function updateCloudBanner() {
     const el = qs("#cloud-banner");
     if (!el) return;
     if (cloudOnline) {
       el.style.display = "none";
-      el.textContent = "";
+      el.innerHTML = "";
     } else {
       el.style.display = "block";
-      el.textContent = cloudMessage || (state && state.firebaseEnabled ? "Could not connect to Firestore" : "Cloud Sync is disabled");
+      const msg = cloudMessage || (state && state.firebaseEnabled ? "Could not connect to Firestore" : "Cloud Sync is disabled");
+      el.innerHTML = `<span>${msg}</span> <button id="reconnect-btn" class="btn small" style="margin-left:8px;">Reconnect</button>`;
+      const btn = qs("#reconnect-btn");
+      if (btn) btn.addEventListener("click", reconnectToCloud);
     }
   }
 
@@ -30,6 +72,7 @@
     cloudOnline = !!online;
     cloudMessage = message || "";
     updateCloudBanner();
+    updateDiagnostics();
   }
 
   function getApiBase() {
@@ -1565,6 +1608,10 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
   }
 
   async function init() {
+    // Initialize diagnostics/banner state
+    updateDiagnostics();
+    updateCloudBanner();
+
     // Admin mode detection and hotkey toggle
     detectAdminModeAtStart();
     applyAdminVisibility();

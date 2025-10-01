@@ -52,6 +52,7 @@ body {
 }
 .btn.danger { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
 .btn.icon { font-size: 22px; padding: 4px 10px; line-height: 1; background: transparent; border: 1px solid var(--border); }
+.btn.small { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
 
 /* Login */
 #login-view {
@@ -77,6 +78,19 @@ body {
 .login-card .subtitle {
   margin-top: 8px;
   color: var(--muted);
+}
+.diagnostics {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: #fafafa;
+  color: var(--muted);
+  font-size: 12px;
+}
+.diagnostics strong {
+  color: var(--text);
+  font-weight: 600;
 }
 
 /* Forms */
