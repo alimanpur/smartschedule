@@ -187,15 +187,21 @@
       const ref = M.doc(db, "campuses", campus);
       const snap = await M.getDoc(ref);
       if (snap.exists()) {
-        state.campuses[campus] = snap.data();
+        // Remote doc exists: prefer remote (authoritative) and persist locally
+        state.campuses[campus] = snap.data() || defaultCampus(campus);
         setCloudStatus(true, "");
+        saveState(state);
         return state.campuses[campus];
       } else {
-        const dc = defaultCampus(campus);
-        await M.setDoc(ref, dc);
-        state.campuses[campus] = dc;
+        // Remote doc missing: publish current local (if any) instead of overwriting with defaults
+        const local = state.campuses[campus] && (state.campuses[campus].teachers?.length || state.campuses[campus].subjects?.length || state.campuses[campus].timetables?.length)
+          ? state.campuses[campus]
+          : defaultCampus(campus);
+        await M.setDoc(ref, local);
+        state.campuses[campus] = local;
         setCloudStatus(true, "");
-        return dc;
+        saveState(state);
+        return local;
       }
     } catch {
       setCloudStatus(false, "Could not connect to Firestore");
