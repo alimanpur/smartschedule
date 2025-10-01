@@ -155,7 +155,10 @@
         return dc;
       }
     } catch {
-}
+      setCloudStatus(false, "Could not connect to Firestore");
+      return null;
+    }
+  }
 
   async function fbSaveCampus(campus) {
     if (!state.firebaseEnabled) {
@@ -692,7 +695,8 @@
     if (qs("#config-username")) qs("#config-username").value = c.credentials.username;
     if (qs("#config-password")) qs("#config-password").value = c.credentials.password;
     const beUrlEl = qs("#backend-url");
-    if (e-server");
+    if (beUrlEl) beUrlEl.value = state.backendUrl || "";
+    const beEnabledEl = qs("#enable-server");
     if (beEnabledEl) beEnabledEl.checked = !!state.serverEnabled;
 
     // Firebase (only if admin fields exist)
@@ -1507,8 +1511,12 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     const campus = info.campus;
     let loaded = null;
     try {
-      loaded = await fbror").textContent = "Login succeeded, but campus data could not be loaded. Please contact an administrator.";
-      return;
+      loaded = await fbLoadCampus(campus);
+    } catch {}
+    if (!loaded) {
+      // Fallback: continue in local-only mode
+      setCloudStatus(false, state.firebaseEnabled ? "Could not connect to Firestore. Working in local-only mode." : "Cloud Sync is disabled");
+      if (!state.campuses[campus]) state.campuses[campus] = defaultCampus(campus);
     }
 
     session = { campus, username };
