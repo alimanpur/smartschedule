@@ -53,7 +53,7 @@
     } catch {}
   }
 
-  // Firebase integration (v12 modular via dynamic imports)
+  // Firebase integration (v12 modular via dynamic imports) — Firestore only (Auth removed)
   function firebaseReady() {
     return !!(window._fbDb);
   }
@@ -67,7 +67,6 @@
       if (!window._fbMods) {
         const appMod = await import("https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js");
         const fsMod = await import("https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js");
-        const authMod = await import("https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js");
         window._fbMods = {
           initializeApp: appMod.initializeApp,
           getApps: appMod.getApps,
@@ -81,13 +80,7 @@
           collection: fsMod.collection,
           getDocs: fsMod.getDocs,
           updateDoc: fsMod.updateDoc,
-          deleteDoc: fsMod.deleteDoc,
-          getAuth: authMod.getAuth,
-          signInWithEmailAndPassword: authMod.signInWithEmailAndPassword,
-          createUserWithEmailAndPassword: authMod.createUserWithEmailAndPassword,
-          setPersistence: authMod.setPersistence,
-          browserLocalPersistence: authMod.browserLocalPersistence,
-          signOut: authMod.signOut
+          deleteDoc: fsMod.deleteDoc
         };
       }
       const M = window._fbMods;
@@ -100,8 +93,6 @@
       }
       window._fbApp = app;
       window._fbDb = M.getFirestore(app);
-      window._fbAuth = M.getAuth(app);
-      try { await M.setPersistence(window._fbAuth, M.browserLocalPersistence); } catch {}
       try { await M.enableIndexedDbPersistence(window._fbDb); } catch {}
     } catch {}
   }
@@ -1321,8 +1312,14 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     if (!adminMode) return;
     await initFirebaseIfEnabled();
     const M = window._fbMods; const db = window._fbDb;
+    const statusEl = qs("#admin-create-status");
     if (!M || !db || !window._fbApp) {
-      const s = qs("#admin-create-status"); if (s) s.textContent = "Firebase not configured.";
+      if (statusEl) statusEl.textContent = "Firebase not configured.";
+      return;
+    }
+    // Firebase Auth is disabled in this build
+    if (!M.createUserWithEmailAndPassword) {
+      if (statusEl) statusEl.textContent = "Firebase Authentication is disabled. Please create users manually in Firebase Auth.";
       return;
     }
     const email = (qs("#admin-hod-email").value || "").trim();
@@ -1330,22 +1327,14 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     const campuses = [];
     if (qs("#admin-campus-main") && qs("#admin-campus-main").checked) campuses.push("MAIN");
     if (qs("#admin-campus-off") && qs("#admin-campus-off").checked) campuses.push("OFF");
-    const statusEl = qs("#admin-create-status");
     if (!email || !password || campuses.length === 0) { if (statusEl) statusEl.textContent = "Provide email, password and at least one campus."; return; }
     try {
       if (!window._fbSecApp) {
         window._fbSecApp = M.initializeApp(state.firebaseConfig || {}, "ttg-admin-secondary");
-        window._fbSecAuth = M.getAuth(window._fbSecApp);
+        // No Auth instance in this build
       }
-      const cred = await M.createUserWithEmailAndPassword(window._fbSecAuth, email, password);
-      const uid = cred.user && cred.user.uid;
-      if (!uid) throw new Error("No UID from Firebase Auth");
-      await M.setDoc(M.doc(db, "hods", uid), { email, campuses });
-      if (statusEl) statusEl.textContent = "HOD created and assigned.";
-      qs("#admin-hod-email").value = "";
-      qs("#admin-hod-password").value = "";
-      adminRefreshHodsList();
-      try { await M.signOut(window._fbSecAuth); } catch {}
+      // Would require Firebase Auth; disabled here
+      if (statusEl) statusEl.textContent = "User creation is not available in this build.";
     } catch (e) {
       if (statusEl) statusEl.textContent = "Error: " + (e && e.message ? e.message : "failed");
     }
@@ -1442,12 +1431,18 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     const status = qs("#config-saved"); if (status) status.textContent = "Server settings saved";
   }
 
+  // Hardcoded credentials login (Firebase Auth removed)
+  const HARDCODED_CREDENTIALS = {
+    "main_hod": { password: "admin@89", campus: "MAIN" },
+    "off_hod": { password: "admin@78", campus: "OFF" }
+  };
+
   async function login() {
-    const email = qs("#login-username").value.trim();
+    const username = (qs("#login-username").value || "").trim();
     const password = qs("#login-password").value;
 
-    if (!email || !email.includes("@")) {
-      qs("#login-error").textContent = "Please enter a valid email.";
+    if (!username) {
+      qs("#login-error").textContent = "Please enter your username.";
       return;
     }
     if (!password) {
@@ -1455,62 +1450,27 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
       return;
     }
 
-    await initFirebaseIfEnabled();
-    if (!state.firebaseEnabled || !window._fbAuth) {
-      qs("#login-error").textContent = "Firebase authentication is not enabled. Contact the administrator.";
+    const info = HARDCODED_CREDENTIALS[username];
+    if (!info || password !== info.password) {
+      qs("#login-error").textContent = "Invalid username or password.";
       return;
     }
 
-    const M = window._fbMods;
-    try {
-      // 1) Auth with email/password
-      const cred = await M.signInWithEmailAndPassword(window._fbAuth, email, password);
-      const uid = cred.user && cred.user.uid;
-
-      // 2) Read hods/{uid} to determine assigned campuses
-      const db = window._fbDb;
-      let campuses = [];
-      try {
-        const hodRef = M.doc(db, "hods", uid);
-        const hodSnap = await M.getDoc(hodRef);
-        if (hodSnap.exists()) {
-          const d = hodSnap.data();
-          if (d && Array.isArray(d.campuses)) {
-            campuses = d.campuses.filter((x) => typeof x === "string" && x.trim().length > 0);
-          }
-        }
-      } catch {}
-
-      if (!campuses.length) {
-        // No campus assignment: show explicit message and prevent proceeding
-        qs("#login-error").textContent = "Authentication successful, but you are not assigned to a campus. Please contact an administrator.";
-        try { await M.signOut(window._fbAuth); } catch {}
-        return;
-      }
-
-      // 3) Auto-select first campus and load it
-      const campus = String(campuses[0]).toUpperCase();
-      const loaded = await fbLoadCampus(campus);
-      if (!loaded) {
-        qs("#login-error").textContent = "Could not load your campus data. Please contact an administrator.";
-        try { await M.signOut(window._fbAuth); } catch {}
-        return;
-      }
-
-      // Optional: reflect campus in the login selector (if present)
-      const campusSel = qs("#login-campus");
-      if (campusSel) campusSel.value = campus;
-
-      // 4) Save session and proceed
-      session = { campus, username: email, uid };
-      saveSession(session);
-      qs("#login-error").textContent = "";
-      setView("main-view");
-      renderTopbar();
-      setSubview("dashboard-view");
-    } catch (e) {
-      qs("#login-error").textContent = "Invalid email or password.";
+    // Initialize Firestore and load campus document
+    await initFirebaseIfEnabled();
+    const campus = info.campus;
+    const loaded = await fbLoadCampus(campus);
+    if (!loaded) {
+      qs("#login-error").textContent = "Login succeeded, but campus data could not be loaded. Please contact an administrator.";
+      return;
     }
+
+    session = { campus, username };
+    saveSession(session);
+    qs("#login-error").textContent = "";
+    setView("main-view");
+    renderTopbar();
+    setSubview("dashboard-view");
   }
 
   async function logout() {
@@ -1518,11 +1478,8 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     session = null;
     authToken = null;
     useBackend = false;
-    if (window._fbAuth && window._fbMods) {
-      try { await window._fbMods.signOut(window._fbAuth); } catch {}
-    }
-    setView("login-view");_code
- new </}
+    setView("login-view");
+  }
 
   function exportDataJson() {
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
