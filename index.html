@@ -6,16 +6,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="styles.css" rel="stylesheet">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&amp;family=Pacifico&amp;display=swap" rel="stylesheet">
 </head>
 <body>
   <div id="app">
     <div id="cloud-banner" class="cloud-banner" style="display:none;"></div>
     <!-- Login View -->
     <section id="login-view" class="view active">
+      <div class="brand-splash">
+        <div class="logo-script">Smart<span>Schedule</span></div>
+        <div class="tagline">Advanced Timetable Management System</div>
+      </div>
       <div class="login-card">
-        <h1>Timetable Generator</h1>
-        <p class="subtitle">HOD Login</p>
+        <div class="login-avatar">👤</div>
+        <h2 class="login-title">HOD Login</h2>
+        <p class="subtitle">Access administrative dashboard</p>
 
         <div class="form-group">
           <label for="login-username">Username</label>
@@ -28,11 +33,12 @@
         </div>
 
         <div class="inline" style="justify-content: space-between;">
-          <button id="login-button" class="btn primary">Sign In</button>
           <label class="inline" style="gap:6px;">
             <input id="login-remember" type="checkbox"> <span>Remember me</span>
           </label>
+          <button id="login-button" class="btn primary">Sign in as HOD</button>
         </div>
+
         <div id="login-error" class="error-text"></div>
         <div id="login-redirect" class="success-text" style="min-height: 20px;"></div>
 
@@ -45,29 +51,33 @@
 
     <!-- Main App View -->
     <section id="main-view" class="view">
-      <header class="topbar">
-        <div class="brand">
-          <div class="logo-circle">TG</div>
-          <div class="brand-info">
-            <div id="college-name">Your College</div>
-            <div id="campus-name" class="muted">Campus</div>
+      <div class="app-shell">
+        <aside class="sidebar">
+          <div class="sidebar-brand">
+            <div class="logo-script small">Smart<span>Schedule</span></div>
+            <div class="muted mini">Timetable Manager</div>
           </div>
-        </div>
-        <nav class="nav">
-          <button class="nav-item active" data-target="dashboard-view">Dashboard</button>
-          <button class="nav-item" data-target="teachers-view">Teachers</button>
-          <button class="nav-item" data-target="subjects-view">Subjects</button>
-          <button class="nav-item" data-target="config-view">Configuration</button>
-          <button class="nav-item" data-target="timetable-view">Timetable</button>
-          <button class="nav-item admin-nav" data-target="admin-view" style="display:none;">Admin</button>
-        </nav>
-        <div class="user-actions">
-          <span id="username-display"></span>
-          <button id="logout-button" class="btn">Logout</button>
-        </div>
-      </header>
-
-      <main class="content">
+          <nav class="nav">
+            <button class="nav-item active" data-target="dashboard-view"><span class="ico">📊</span><span>Dashboard</span></button>
+            <button class="nav-item" data-target="teachers-view"><span class="ico">👤</span><span>Teachers</span></button>
+            <button class="nav-item" data-target="subjects-view"><span class="ico">📘</span><span>Subjects</span></button>
+            <button class="nav-item" data-target="config-view"><span class="ico">⚙️</span><span>Configuration</span></button>
+            <button class="nav-item" data-target="timetable-view"><span class="ico">🗓️</span><span>Timetable</span></button>
+            <button class="nav-item admin-nav" data-target="admin-view" style="display:none;"><span class="ico">🔒</span><span>Admin</span></button>
+          </nav>
+        </aside>
+        <div class="main-area">
+          <header class="pagebar">
+            <div class="brand-info">
+              <div id="college-name">Your College</div>
+              <div id="campus-name" class="muted">Campus</div>
+            </div>
+            <div class="user-actions">
+              <span id="username-display"></span>
+              <button id="logout-button" class="btn">Logout</button>
+            </div>
+          </header>
+          <main class="content">
         <!-- Dashboard -->
         <section id="dashboard-view" class="subview active">
           <div class="cards">
@@ -419,6 +429,8 @@
           </div>
         </section>
       </main>
+        </div>
+      </div>
     </section>
   </div>
 
