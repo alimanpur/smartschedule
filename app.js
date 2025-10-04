@@ -408,8 +408,18 @@
   }
 
   function setView(viewId) {
-    qsa(".view").forEach((v) => v.classList.remove("active"));
-    qs(`#${viewId}`).classList.add("active");
+    // Ensure only the target view is visible and scroll to the top
+    qsa(".view").forEach((v) => {
+      if (v.id === viewId) {
+        v.classList.add("active");
+        v.style.display = "block";
+      } else {
+        v.classList.remove("active");
+        v.style.display = "none";
+      }
+    });
+    // Bring the new view to the top of the viewport
+    try { window.scrollTo({ top: 0, left: 0, behavior: "instant" }); } catch { window.scrollTo(0, 0); }
   }
   function setSubview(id) {
     qsa(".subview").forEach((v) => {
@@ -1605,6 +1615,7 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     setView("main-view");
     renderTopbar();
     setSubview("dashboard-view");
+    try { window.scrollTo({ top: 0, left: 0, behavior: "instant" }); } catch { window.scrollTo(0, 0); }
     if (btn) btn.disabled = false;
   }
 
@@ -1614,6 +1625,7 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     authToken = null;
     useBackend = false;
     setView("login-view");
+    try { window.scrollTo({ top: 0, left: 0, behavior: "instant" }); } catch { window.scrollTo(0, 0); }
   }
 
   function exportDataJson() {
