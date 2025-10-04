@@ -1,6 +1,7 @@
 (function () {
   const LS_KEY = "ttg_data_v1";
   const SS_KEY = "ttg_session";
+  const LS_SESSION_KEY = "ttg_persisted_session";
   const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   const qs = (sel) => document.querySelector(sel);
@@ -326,7 +327,12 @@
   }
 
   function loadSession() {
-    const raw = sessionStorage.getItem(SS_KEY);
+    // Prefer persisted session (localStorage) if present
+    let raw = localStorage.getItem(LS_SESSION_KEY);
+    if (raw) {
+      try { return JSON.parse(raw); } catch {}
+    }
+    raw = sessionStorage.getItem(SS_KEY);
     if (!raw) return null;
     try {
       return JSON.parse(raw);
@@ -335,13 +341,11 @@
     }
   }
 
-  function saveSession(sess) {
-    sessionStorage.setItem(SS_KEY, JSON.stringify(sess));
-  }
-
-  function clearSession() {
-    sessionStorage.removeItem(SS_KEY);
-  }
+  function saveSession(sess, persist = false) {
+    try {
+      sessionStorage.setItem(SS_KEY, JSON.stringify(sess));
+      if (persist) {
+        localStorage.setItem(LS_SESSION_KEY, JSON
 
   const state = loadState();
   let session = loadSession();
@@ -1539,6 +1543,7 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
   async function login() {
     const username = (qs("#login-username").value || "").trim();
     const password = qs("#login-password").value;
+    const remember = !!(qs("#login-remember") && qs("#login-remember").checked);
 
     if (!username) {
       qs("#login-error").textContent = "Please enter your username.";
@@ -1569,7 +1574,7 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     }
 
     session = { campus, username };
-    saveSession(session);
+    saveSession(session, remember);
     qs("#login-error").textContent = "";
     setView("main-view");
     renderTopbar();
@@ -1705,13 +1710,22 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     }
 
     if (session) {
-      setView("main-view");
-      renderTopbar();
-      setSubview("dashboard-view");
+      // Friendly redirect message then go to dashboard
+      setView("login-view");
+      const msgEl = qs("#login-redirect");
+      if (msgEl) {
+        msgEl.textContent = "Welcome back, redirecting to dashboard…";
+      }
+      setTimeout(() => {
+        if (msgEl) msgEl.textContent = "";
+        setView("main-view");
+        renderTopbar();
+        setSubview("dashboard-view");
+      }, 700);
     } else {
       setView("login-view");
-    }
-  }
+    }_code
+ new </}
 
   document.addEventListener("DOMContentLoaded", init);
 })();

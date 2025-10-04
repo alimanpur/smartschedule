@@ -27,8 +27,14 @@
           <input id="login-password" type="password" placeholder="Enter password">
         </div>
 
-        <button id="login-button" class="btn primary">Sign In</button>
+        <div class="inline" style="justify-content: space-between;">
+          <button id="login-button" class="btn primary">Sign In</button>
+          <label class="inline" style="gap:6px;">
+            <input id="login-remember" type="checkbox"> <span>Remember me</span>
+          </label>
+        </div>
         <div id="login-error" class="error-text"></div>
+        <div id="login-redirect" class="success-text" style="min-height: 20px;"></div>
 
         <div id="diagnostics" class="diagnostics">
           <div><strong>Cloud:</strong> <span id="diag-cloud">Checking…</span></div>
