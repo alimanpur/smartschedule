@@ -43,8 +43,14 @@ body::after{
 /* Views */
 .view { display: none; }
 .view.active { display: block; }
+/* Animated subview transitions */
 .subview { display: none; }
 .subview.active { display: block; }
+.subview.reveal { animation: fadeInUp .24s ease; }
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
 
 /* Buttons */
 .btn {
@@ -169,8 +175,9 @@ body::after{
   border: 1px solid transparent;
   color: var(--text);
   cursor: pointer;
+  transition: background .15s ease, box-shadow .15s ease, border-color .15s ease;
 }
-.nav .nav-item .ico{ width: 18px; text-align: center; opacity: .9; }
+.nav .nav-item .ico{ font-size: 18px; width: 18px; text-align: center; opacity: .95; color: #4f6dd6; }
 .nav .nav-item:hover{ background: #f4f7ff; border-color: #e7edff; }
 .nav .nav-item.active{ background: #eef4ff; border-color: #d8e5ff; box-shadow: 0 6px 14px rgba(59,130,246,.12); }
 
@@ -211,6 +218,12 @@ body::after{
   box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
   position: relative;
   overflow: hidden;
+  transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.card:hover{
+  transform: translateY(-3px);
+  box-shadow: 0 16px 32px rgba(15,23,42,.12);
+  border-color: #dbe6ff;
 }
 .card::after{
   content:"";
@@ -315,6 +328,19 @@ body::after{
   border-radius: 12px;
   padding: 12px;
 }
+
+/* Quick actions */
+.quick-actions h3{ margin: 0 0 8px; }
+.qa-row{ display: flex; gap: 12px; flex-wrap: wrap; }
+.qa-btn{
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-radius: 12px;
+  border: 1px solid var(--border); background: #fff;
+  cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+}
+.qa-btn i{ font-size: 18px; color: #6b8bff; }
+.qa-btn:hover{ transform: translateY(-2px); box-shadow: 0 12px 24px rgba(59,130,246,.15); border-color: #d8e5ff; background: #f8fbff; }
 
 /* Modal */
 .modal-overlay {

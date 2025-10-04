@@ -345,7 +345,19 @@
     try {
       sessionStorage.setItem(SS_KEY, JSON.stringify(sess));
       if (persist) {
-        localStorage.setItem(LS_SESSION_KEY, JSON
+        localStorage.setItem(LS_SESSION_KEY, JSON.stringify(sess));
+      } else {
+        localStorage.removeItem(LS_SESSION_KEY);
+      }
+    } catch {}
+  }
+
+  function clearSession() {
+    try {
+      sessionStorage.removeItem(SS_KEY);
+      localStorage.removeItem(LS_SESSION_KEY);
+    } catch {}
+  }
 
   const state = loadState();
   let session = loadSession();
@@ -400,8 +412,16 @@
     qs(`#${viewId}`).classList.add("active");
   }
   function setSubview(id) {
-    qsa(".subview").forEach((v) => v.classList.remove("active"));
-    qs(`#${id}`).classList.add("active");
+    qsa(".subview").forEach((v) => {
+      v.classList.remove("active");
+      v.classList.remove("reveal");
+    });
+    const target = qs(`#${id}`);
+    if (!target) return;
+    target.classList.add("active");
+    // Animate in
+    requestAnimationFrame(() => target.classList.add("reveal"));
+
     qsa(".nav .nav-item").forEach((btn) => {
       btn.classList.toggle("active", btn.getAttribute("data-target") === id);
     });
@@ -1545,18 +1565,24 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     const password = qs("#login-password").value;
     const remember = !!(qs("#login-remember") && qs("#login-remember").checked);
 
+    const btn = qs("#login-button");
+    if (btn) btn.disabled = true;
+
     if (!username) {
       qs("#login-error").textContent = "Please enter your username.";
+      if (btn) btn.disabled = false;
       return;
     }
     if (!password) {
       qs("#login-error").textContent = "Please enter your password.";
+      if (btn) btn.disabled = false;
       return;
     }
 
     const info = HARDCODED_CREDENTIALS[username];
     if (!info || password !== info.password) {
       qs("#login-error").textContent = "Invalid username or password.";
+      if (btn) btn.disabled = false;
       return;
     }
 
@@ -1579,6 +1605,7 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     setView("main-view");
     renderTopbar();
     setSubview("dashboard-view");
+    if (btn) btn.disabled = false;
   }
 
   async function logout() {
@@ -1639,6 +1666,29 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
     qsa(".nav .nav-item").forEach((btn) => {
       btn.addEventListener("click", () => setSubview(btn.getAttribute("data-target")));
     });
+
+    // Quick Actions
+    const qaTeacher = qs("#qa-add-teacher");
+    if (qaTeacher) qaTeacher.addEventListener("click", () => {
+      setSubview("teachers-view");
+      setTimeout(() => { const el = qs("#teacher-name"); if (el) el.focus(); }, 50);
+    });
+    const qaSubject = qs("#qa-add-subject");
+    if (qaSubject) qaSubject.addEventListener("click", () => {
+      setSubview("subjects-view");
+      setTimeout(() => { const el = qs("#subject-code"); if (el) el.focus(); }, 50);
+    });
+    const qaTT = qs("#qa-generate-tt");
+    if (qaTT) qaTT.addEventListener("click", () => {
+      setSubview("timetable-view");
+      setTimeout(() => { const el = qs("#generate-button"); if (el) el.focus(); }, 50);
+    });
+
+    // Submit on Enter in login fields
+    const lu = qs("#login-username");
+    const lp = qs("#login-password");
+    if (lu) lu.addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
+    if (lp) lp.addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
 
     qs("#add-teacher-button").addEventListener("click", addTeacher);
     qs("#add-subject-button").addEventListener("click", addSubject);
@@ -1724,8 +1774,8 @@ ${buildExportHTML({ grid, slots, branch, semester: sem })}
       }, 700);
     } else {
       setView("login-view");
-    }_code
- new </}
+    }
+  }
 
   document.addEventListener("DOMContentLoaded", init);
 })();
